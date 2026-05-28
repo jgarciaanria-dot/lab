@@ -176,6 +176,7 @@ tr:hover td{background:var(--color-background-secondary)}
       <div class="nav-section">Datos</div>
       <div class="nav-item" onclick="exportarDatos()"><i class="ti ti-download"></i>Exportar backup</div>
       <div class="nav-item" onclick="document.getElementById('import-file').click()"><i class="ti ti-upload"></i>Importar backup</div>
+      <div class="nav-item" onclick="configurarApiKey()"><i class="ti ti-key"></i>Configurar API key</div>
     </nav>
   </div>
   <input type="file" id="import-file" accept=".json" style="display:none" onchange="importarDatos(this)">
@@ -619,6 +620,7 @@ function deleteReq(i){if(confirm('¿Eliminar?')){const a=DB.requerimientos();a.s
 
 /* ── IA GENERAR REQS ── */
 async function generarReqsDesdeRelevamiento(rel,relIdx){
+  if(!checkApiKey())return;
   navigate('requerimientos');
   const cont=document.getElementById('content');
   cont.innerHTML=`<div class="card"><div class="ai-box">
@@ -637,9 +639,9 @@ RELEVAMIENTO:
 Genera entre 3 y 6 requerimientos funcionales. Responde SOLO con este JSON, sin texto adicional ni backticks:
 {"requerimientos":[{"titulo":"Título corto","descripcion":"Qué debe hacer el sistema (el QUÉ, no el CÓMO)","prioridad":"Alta|Media|Baja","criterios":"Criterios de aceptación verificables"}]}`;
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1500,messages:[{role:'user',content:prompt}]})});
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${getApiKey()}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})});
     const data=await res.json();
-    const text=data.content?.map(c=>c.text||'').join('')||'';
+    const text=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
     const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
     const reqs=DB.requerimientos();let added=0;
     parsed.requerimientos.forEach(r=>{reqs.push({titulo:r.titulo,descripcion:r.descripcion,prioridad:r.prioridad,criterios:r.criterios,estado:'Pendiente',proyecto:rel.proyecto,ia_generado:true,fecha:new Date().toISOString().split('T')[0]});added++;});
@@ -679,6 +681,7 @@ function openErsModal(){
 }
 
 async function generarERS(){
+  if(!checkApiKey())return;
   const proyecto=v('ers-proyecto');
   if(!proyecto){alert('Selecciona un proyecto');return;}
   closeModal();
@@ -720,9 +723,9 @@ Genera la ERS completa. Responde SOLO con este JSON, sin texto adicional ni back
 }`;
 
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2500,messages:[{role:'user',content:prompt}]})});
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${getApiKey()}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})});
     const data=await res.json();
-    const text=data.content?.map(c=>c.text||'').join('')||'';
+    const text=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
     const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
     const ersArr=DB.ers();
     const newErs={proyecto,objetivo:parsed.objetivo,alcance:parsed.alcance,stakeholders:parsed.stakeholders||[],reqs_funcionales:parsed.reqs_funcionales||[],reqs_no_funcionales:parsed.reqs_no_funcionales||[],reglas_negocio:parsed.reglas_negocio||[],restricciones:parsed.restricciones||[],supuestos:parsed.supuestos||[],total_reqs:(parsed.reqs_funcionales||[]).length,fecha:new Date().toISOString().split('T')[0]};
@@ -882,6 +885,58 @@ function importarDatos(input){
       input.value='';
       alert('¡Datos importados correctamente!');
       navigate('dashboard');
+
+/* ── API KEY ── */
+function getApiKey(){
+  return localStorage.getItem('reqmgr_gemini_key')||'';
+}
+
+function configurarApiKey(){
+  const current=getApiKey();
+  showModal(`<h3>Configurar API key de Gemini</h3>
+    <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:16px;line-height:1.6">
+      La key se guarda solo en tu navegador, nunca en el código ni en GitHub.<br>
+      Obtén tu key gratis en <a href="https://aistudio.google.com" target="_blank" style="color:var(--color-text-info)">aistudio.google.com</a> → API Keys.
+    </p>
+    <div class="field">
+      <label>API Key de Gemini</label>
+      <input id="gemini-key" type="password" value="${current}" placeholder="AIza...">
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+      ${current?`<button class="btn danger" onclick="localStorage.removeItem('reqmgr_gemini_key');closeModal();alert('Key eliminada.')">Eliminar key</button>`:''}
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn primary" onclick="guardarApiKey()"><i class="ti ti-check"></i> Guardar</button>
+    </div>`);
+}
+
+function guardarApiKey(){
+  const key=v('gemini-key').trim();
+  if(!key){alert('Ingresa una key válida');return;}
+  localStorage.setItem('reqmgr_gemini_key',key);
+  closeModal();
+  alert('¡API key guardada! Ya puedes usar la IA.');
+}
+
+function checkApiKey(){
+  if(!getApiKey()){
+    showModal(`<h3>API key requerida</h3>
+      <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:16px;line-height:1.6">
+        Para usar la IA necesitas configurar tu API key de Gemini (gratis).<br>
+        Ve a <a href="https://aistudio.google.com" target="_blank" style="color:var(--color-text-info)">aistudio.google.com</a> → API Keys → Create API key.
+      </p>
+      <div class="field">
+        <label>API Key de Gemini</label>
+        <input id="gemini-key" type="password" placeholder="AIza...">
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+        <button class="btn" onclick="closeModal()">Cancelar</button>
+        <button class="btn primary" onclick="guardarApiKey()"><i class="ti ti-check"></i> Guardar y continuar</button>
+      </div>`);
+    return false;
+  }
+  return true;
+}
+
     }catch(err){
       alert('Error al leer el archivo: '+err.message);
     }
