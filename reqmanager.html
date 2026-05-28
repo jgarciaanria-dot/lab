@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ReqManager — Gestión de Requerimientos</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.x/dist/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --color-background-primary:#ffffff;
+  --color-background-secondary:#f5f5f4;
+  --color-background-tertiary:#eeede9;
+  --color-text-primary:#1a1a18;
+  --color-text-secondary:#5f5e5a;
+  --color-text-tertiary:#888780;
+  --color-text-info:#185fa5;
+  --color-text-danger:#a32d2d;
+  --color-text-success:#0f6e56;
+  --color-border-tertiary:rgba(0,0,0,0.1);
+  --color-border-secondary:rgba(0,0,0,0.18);
+  --color-border-primary:rgba(0,0,0,0.3);
+  --border-radius-md:8px;
+  --border-radius-lg:12px;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --color-background-primary:#1e1e1c;
+    --color-background-secondary:#282826;
+    --color-background-tertiary:#141412;
+    --color-text-primary:#e8e6df;
+    --color-text-secondary:#9c9a92;
+    --color-text-tertiary:#6b6965;
+    --color-text-info:#85b7eb;
+    --color-text-danger:#f09595;
+    --color-text-success:#5DCAA5;
+    --color-border-tertiary:rgba(255,255,255,0.1);
+    --color-border-secondary:rgba(255,255,255,0.18);
+    --color-border-primary:rgba(255,255,255,0.3);
+  }
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:var(--color-text-primary);background:var(--color-background-tertiary)}
+#app{display:flex;height:100vh;overflow:hidden}
+#sidebar{width:210px;background:var(--color-background-primary);border-right:0.5px solid var(--color-border-tertiary);display:flex;flex-direction:column;flex-shrink:0}
+#sidebar-header{padding:16px 14px 12px;border-bottom:0.5px solid var(--color-border-tertiary)}
+#sidebar-header h1{font-size:13px;font-weight:600;color:var(--color-text-primary);letter-spacing:.02em}
+#sidebar-header p{font-size:11px;color:var(--color-text-tertiary);margin-top:2px}
+nav{flex:1;padding:8px 0;overflow-y:auto}
+.nav-item{display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;transition:background .12s;font-size:13px;color:var(--color-text-secondary);border-left:2px solid transparent}
+.nav-item:hover{background:var(--color-background-secondary);color:var(--color-text-primary)}
+.nav-item.active{background:var(--color-background-secondary);color:var(--color-text-primary);border-left-color:var(--color-text-info)}
+.nav-item i{font-size:15px;width:16px}
+.nav-section{font-size:10px;font-weight:600;color:var(--color-text-tertiary);padding:12px 14px 4px;text-transform:uppercase;letter-spacing:.07em}
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#topbar{height:48px;background:var(--color-background-primary);border-bottom:0.5px solid var(--color-border-tertiary);display:flex;align-items:center;padding:0 20px;gap:8px;flex-shrink:0}
+#topbar h2{font-size:14px;font-weight:500;flex:1}
+#content{flex:1;overflow-y:auto;padding:20px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-secondary);background:transparent;color:var(--color-text-primary);font-size:13px;cursor:pointer;transition:background .12s;font-family:inherit}
+.btn:hover{background:var(--color-background-secondary)}
+.btn.primary{background:var(--color-text-primary);color:var(--color-background-primary);border-color:transparent}
+.btn.primary:hover{opacity:.88}
+.btn.sm{padding:4px 10px;font-size:12px}
+.btn.danger{color:var(--color-text-danger)}
+.btn.success{color:var(--color-text-success);border-color:rgba(15,110,86,0.3)}
+.autosave-indicator{font-size:11px;color:var(--color-text-tertiary);display:flex;align-items:center;gap:4px;opacity:0;transition:opacity .3s}
+.autosave-indicator.show{opacity:1}
+.card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:16px 18px;margin-bottom:12px}
+.metric-card{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:14px 16px;flex:1;min-width:100px}
+.metric-card .label{font-size:11px;color:var(--color-text-tertiary);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.metric-card .value{font-size:24px;font-weight:500}
+.metrics-row{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+label{font-size:12px;color:var(--color-text-secondary);display:block;margin-bottom:4px;font-weight:500}
+input,select,textarea{width:100%;padding:7px 10px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:var(--color-background-primary);color:var(--color-text-primary);font-size:13px;font-family:inherit;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--color-border-primary)}
+textarea{resize:vertical;min-height:70px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.field{margin-bottom:12px}
+.field:last-child{margin-bottom:0}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500}
+.badge.pending{background:#FAEEDA;color:#633806}
+.badge.analysis{background:#E6F1FB;color:#0C447C}
+.badge.dev{background:#EAF3DE;color:#27500A}
+.badge.qa{background:#EEEDFE;color:#3C3489}
+.badge.uat{background:#FBEAF0;color:#72243E}
+.badge.prod{background:#E1F5EE;color:#085041}
+.badge.high{background:#FCEBEB;color:#791F1F}
+.badge.medium{background:#FAEEDA;color:#633806}
+.badge.low{background:#EAF3DE;color:#27500A}
+@media(prefers-color-scheme:dark){
+  .badge.pending{background:#412402;color:#FAC775}
+  .badge.analysis{background:#042C53;color:#85B7EB}
+  .badge.dev{background:#173404;color:#C0DD97}
+  .badge.qa{background:#26215C;color:#AFA9EC}
+  .badge.uat{background:#4B1528;color:#ED93B1}
+  .badge.prod{background:#04342C;color:#5DCAA5}
+  .badge.high{background:#501313;color:#F09595}
+  .badge.medium{background:#412402;color:#FAC775}
+  .badge.low{background:#173404;color:#C0DD97}
+}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11px;font-weight:600;color:var(--color-text-tertiary);padding:8px 10px;border-bottom:0.5px solid var(--color-border-tertiary);text-transform:uppercase;letter-spacing:.05em}
+td{padding:9px 10px;border-bottom:0.5px solid var(--color-border-tertiary);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--color-background-secondary)}
+.empty-state{text-align:center;padding:64px 20px;color:var(--color-text-tertiary)}
+.empty-state i{font-size:36px;margin-bottom:10px;display:block}
+.empty-state p{font-size:13px;line-height:1.7}
+.ai-box{background:var(--color-background-secondary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-lg);padding:16px;margin-top:12px}
+.ai-header{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--color-text-secondary);margin-bottom:10px}
+.ai-output{font-size:13px;line-height:1.7;color:var(--color-text-primary);white-space:pre-wrap}
+.loading-dots::after{content:'.';animation:dots 1.2s steps(3,end) infinite}
+@keyframes dots{0%{content:'.'}33%{content:'..'}66%{content:'...'}}
+.tab-row{display:flex;gap:0;border-bottom:0.5px solid var(--color-border-tertiary);margin-bottom:16px;overflow-x:auto}
+.tab{padding:8px 14px;font-size:13px;cursor:pointer;border-bottom:2px solid transparent;color:var(--color-text-secondary);margin-bottom:-0.5px;white-space:nowrap}
+.tab.active{color:var(--color-text-primary);border-bottom-color:var(--color-text-primary);font-weight:500}
+.tab:hover{color:var(--color-text-primary)}
+.progress-bar{height:4px;background:var(--color-background-secondary);border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;border-radius:2px;background:var(--color-text-info);transition:width .3s}
+.req-item{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:12px 14px;margin-bottom:8px;cursor:pointer;transition:border-color .12s;background:var(--color-background-primary)}
+.req-item:hover{border-color:var(--color-border-primary)}
+.req-id{font-size:11px;color:var(--color-text-tertiary);font-weight:500}
+.req-title{font-size:13px;font-weight:500;margin:3px 0 7px}
+.req-meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:1000}
+.modal{background:var(--color-background-primary);border-radius:var(--border-radius-lg);border:0.5px solid var(--color-border-tertiary);padding:24px;width:min(600px,96vw);max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.2)}
+.modal h3{font-size:15px;font-weight:500;margin-bottom:16px}
+.status-flow{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+.status-btn{padding:4px 10px;border-radius:20px;font-size:11px;cursor:pointer;border:0.5px solid var(--color-border-secondary);background:transparent;color:var(--color-text-secondary);transition:all .12s;font-family:inherit}
+.status-btn:hover,.status-btn.active{background:var(--color-background-secondary);color:var(--color-text-primary);border-color:var(--color-border-primary);font-weight:500}
+.kanban-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.kanban-col{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:12px}
+.kanban-header{font-size:11px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.kanban-card{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:9px 11px;margin-bottom:7px;font-size:12px;cursor:pointer;transition:opacity .12s}
+.kanban-card:hover{opacity:.8}
+.kanban-card .kc-title{font-weight:500;margin-bottom:4px;line-height:1.4}
+.kanban-empty{font-size:11px;color:var(--color-text-tertiary);text-align:center;padding:16px 0}
+.detail-row{display:flex;flex-direction:column;gap:4px;padding:10px 0;border-bottom:0.5px solid var(--color-border-tertiary)}
+.detail-row:last-child{border-bottom:none}
+.detail-label{font-size:11px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.05em}
+.detail-value{font-size:13px;line-height:1.6}
+.ers-section{margin-bottom:20px}
+.ers-section h4{font-size:12px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;padding-bottom:6px;border-bottom:0.5px solid var(--color-border-tertiary)}
+.ers-section p,.ers-section li{font-size:13px;line-height:1.7;color:var(--color-text-primary)}
+.ers-section ul{padding-left:18px}
+.ers-req-item{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:10px 14px;margin-bottom:8px}
+.ers-req-item .ers-req-id{font-size:11px;color:var(--color-text-tertiary);font-weight:600}
+.ers-req-item .ers-req-title{font-size:13px;font-weight:500;margin:3px 0 4px}
+.ers-req-item .ers-req-desc{font-size:12px;color:var(--color-text-secondary);line-height:1.6}
+@media print{
+  #sidebar,#topbar,#topbar-actions,.btn,.nav-item{display:none!important}
+  #main{width:100%}
+  #content{padding:0}
+  .modal-overlay,.modal{display:none!important}
+  body{background:white}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="sidebar">
+    <div id="sidebar-header">
+      <h1><i class="ti ti-layers-intersect"></i> ReqManager</h1>
+      <p>Gestión de requerimientos</p>
+    </div>
+    <nav>
+      <div class="nav-section">Principal</div>
+      <div class="nav-item active" onclick="navigate('dashboard')"><i class="ti ti-layout-dashboard"></i>Dashboard</div>
+      <div class="nav-item" onclick="navigate('projects')"><i class="ti ti-folder"></i>Proyectos</div>
+      <div class="nav-section">Trabajo</div>
+      <div class="nav-item" onclick="navigate('relevamientos')"><i class="ti ti-clipboard-list"></i>Relevamientos</div>
+      <div class="nav-item" onclick="navigate('requerimientos')"><i class="ti ti-list-check"></i>Requerimientos</div>
+      <div class="nav-item" onclick="navigate('especificacion')"><i class="ti ti-file-description"></i>Especificación (ERS)</div>
+      <div class="nav-item" onclick="navigate('seguimiento')"><i class="ti ti-git-branch"></i>Seguimiento</div>
+      <div class="nav-section">Recursos</div>
+      <div class="nav-item" onclick="navigate('evidencias')"><i class="ti ti-paperclip"></i>Evidencias</div>
+      <div class="nav-section">Datos</div>
+      <div class="nav-item" onclick="exportarDatos()"><i class="ti ti-download"></i>Exportar backup</div>
+      <div class="nav-item" onclick="document.getElementById('import-file').click()"><i class="ti ti-upload"></i>Importar backup</div>
+    </nav>
+  </div>
+  <input type="file" id="import-file" accept=".json" style="display:none" onchange="importarDatos(this)">
+  <div id="main">
+    <div id="topbar">
+      <h2 id="topbar-title">Dashboard ejecutivo</h2>
+      <div id="topbar-actions"></div>
+      <span class="autosave-indicator" id="autosave-ind"><i class="ti ti-check" style="font-size:12px"></i> Guardado</span>
+    </div>
+    <div id="content"></div>
+  </div>
+</div>
+<div id="modal-container"></div>
+
+<script>
+const DB={
+  get(k){try{return JSON.parse(localStorage.getItem('reqmgr_'+k)||'null')}catch{return null}},
+  set(k,v){localStorage.setItem('reqmgr_'+k,JSON.stringify(v))},
+  projects(){return this.get('projects')||[]},
+  saveProjects(d){this.set('projects',d);flashSave()},
+  relevamientos(){return this.get('relevamientos')||[]},
+  saveRelevamientos(d){this.set('relevamientos',d);flashSave()},
+  requerimientos(){return this.get('requerimientos')||[]},
+  saveRequerimientos(d){this.set('requerimientos',d);flashSave()},
+  ers(){return this.get('ers')||[]},
+  saveErs(d){this.set('ers',d);flashSave()}
+};
+
+function flashSave(){
+  const el=document.getElementById('autosave-ind');
+  if(!el)return;
+  el.classList.add('show');
+  clearTimeout(window._saveTimer);
+  window._saveTimer=setTimeout(()=>el.classList.remove('show'),2000);
+}
+
+const STATES=['Pendiente','Análisis','Desarrollo','QA','UAT','Producción'];
+const STATE_KEY=['pending','analysis','dev','qa','uat','prod'];
+const PRIO=['Alta','Media','Baja'];
+const PRIO_KEY=['high','medium','low'];
+const AREAS=['Operaciones','Logística','Finanzas','TI','RRHH','Comercial','Bunker','Puerto'];
+
+let currentView='dashboard';
+let autoSaveTimers={};
+
+function autoSave(formGetter,saveFunc,delay=1200){
+  clearTimeout(autoSaveTimers[saveFunc]);
+  autoSaveTimers[saveFunc]=setTimeout(()=>{
+    try{saveFunc(formGetter());}catch(e){}
+  },delay);
+}
+
+function bindAutoSave(fields,getDataFn,saveFn){
+  fields.forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el)return;
+    el.addEventListener('input',()=>autoSave(getDataFn,saveFn));
+    el.addEventListener('change',()=>autoSave(getDataFn,saveFn));
+  });
+}
+
+function navigate(view){
+  currentView=view;
+  document.querySelectorAll('.nav-item').forEach(el=>{
+    el.classList.toggle('active',el.getAttribute('onclick')===`navigate('${view}')`);
+  });
+  const titles={dashboard:'Dashboard ejecutivo',projects:'Proyectos',relevamientos:'Relevamientos funcionales',requerimientos:'Requerimientos',especificacion:'Especificación (ERS)',seguimiento:'Seguimiento Kanban',evidencias:'Evidencias'};
+  document.getElementById('topbar-title').textContent=titles[view]||view;
+  const acts=document.getElementById('topbar-actions');
+  acts.innerHTML='';
+  if(view==='projects'){const b=mkBtn('primary','<i class="ti ti-plus"></i> Nuevo proyecto',()=>openProjectModal());acts.appendChild(b);}
+  if(view==='relevamientos'){const b=mkBtn('primary','<i class="ti ti-plus"></i> Nuevo relevamiento',()=>openRelevamientoModal());acts.appendChild(b);}
+  if(view==='requerimientos'){
+    const b1=mkBtn('','<i class="ti ti-file-export"></i> Exportar PDF',()=>exportReqsPDF());acts.appendChild(b1);
+    const b2=mkBtn('primary','<i class="ti ti-plus"></i> Nuevo requerimiento',()=>openReqModal());acts.appendChild(b2);
+  }
+  if(view==='especificacion'){
+    const b=mkBtn('primary','<i class="ti ti-sparkles"></i> Generar ERS con IA',()=>openErsModal());acts.appendChild(b);
+  }
+  renderView(view);
+}
+
+function mkBtn(cls,html,fn){
+  const b=document.createElement('button');
+  b.className='btn'+(cls?' '+cls:'');
+  b.innerHTML=html;b.onclick=fn;return b;
+}
+
+function renderView(v){
+  const c=document.getElementById('content');
+  const map={dashboard:renderDashboard,projects:renderProjects,relevamientos:renderRelevamientos,requerimientos:renderRequerimientos,especificacion:renderEspecificacion,seguimiento:renderSeguimiento,evidencias:renderEvidencias};
+  c.innerHTML=(map[v]||renderDashboard)();
+}
+
+/* ── DASHBOARD ── */
+function renderDashboard(){
+  const reqs=DB.requerimientos(),projs=DB.projects(),relevs=DB.relevamientos(),ers=DB.ers();
+  const byState=STATES.map(s=>reqs.filter(r=>r.estado===s).length);
+  const byPrio=PRIO.map(p=>reqs.filter(r=>r.prioridad===p).length);
+  return `<div class="metrics-row">
+    <div class="metric-card"><div class="label">Proyectos activos</div><div class="value">${projs.filter(p=>p.estado!=='Producción').length}</div></div>
+    <div class="metric-card"><div class="label">Requerimientos</div><div class="value">${reqs.length}</div></div>
+    <div class="metric-card"><div class="label">Relevamientos</div><div class="value">${relevs.length}</div></div>
+    <div class="metric-card"><div class="label">ERS generadas</div><div class="value">${ers.length}</div></div>
+    <div class="metric-card"><div class="label">En producción</div><div class="value">${byState[5]||0}</div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div class="card">
+      <div style="font-size:11px;font-weight:600;margin-bottom:14px;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.05em">Requerimientos por estado</div>
+      ${STATES.map((s,i)=>{const cnt=byState[i];const pct=reqs.length?Math.round(cnt/reqs.length*100):0;
+        return `<div style="margin-bottom:11px"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px">${s}</span><span style="font-size:12px;color:var(--color-text-secondary)">${cnt}</span></div><div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div></div>`;
+      }).join('')}
+    </div>
+    <div class="card">
+      <div style="font-size:11px;font-weight:600;margin-bottom:14px;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.05em">Prioridades</div>
+      ${PRIO.map((p,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:0.5px solid var(--color-border-tertiary)"><span style="font-size:13px">${p}</span><span class="badge ${PRIO_KEY[i]}">${byPrio[i]}</span></div>`).join('')}
+      <div style="font-size:11px;font-weight:600;margin:16px 0 10px;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.05em">Proyectos recientes</div>
+      ${projs.slice(-4).reverse().map(p=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:0.5px solid var(--color-border-tertiary)"><span style="font-size:12px">${escH(p.nombre)}</span><span class="badge ${STATE_KEY[STATES.indexOf(p.estado)]||'pending'}">${p.estado}</span></div>`).join('')||'<p style="font-size:12px;color:var(--color-text-tertiary)">Sin proyectos aún</p>'}
+    </div>
+  </div>`;
+}
+
+/* ── PROYECTOS ── */
+function renderProjects(){
+  const projs=DB.projects();
+  if(!projs.length)return `<div class="empty-state"><i class="ti ti-folder-open"></i><p>No hay proyectos registrados.<br>Crea el primero con el botón de arriba.</p></div>`;
+  return `<div class="card" style="padding:0;overflow:hidden"><table>
+    <thead><tr><th>Proyecto</th><th>Área</th><th>Responsable</th><th>Estado</th><th>Prioridad</th><th>Fecha</th><th></th></tr></thead>
+    <tbody>${projs.map((p,i)=>`<tr>
+      <td style="font-weight:500">${escH(p.nombre)}</td>
+      <td style="font-size:12px;color:var(--color-text-secondary)">${escH(p.area)}</td>
+      <td>${escH(p.responsable)}</td>
+      <td><span class="badge ${STATE_KEY[STATES.indexOf(p.estado)]||'pending'}">${p.estado}</span></td>
+      <td><span class="badge ${PRIO_KEY[PRIO.indexOf(p.prioridad)]||'medium'}">${p.prioridad}</span></td>
+      <td style="font-size:12px;color:var(--color-text-secondary)">${p.fecha||'-'}</td>
+      <td><button class="btn sm" onclick="editProject(${i})"><i class="ti ti-edit"></i></button></td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+function openProjectModal(proj,idx){
+  const isEdit=proj!==undefined;
+  const p=proj||{nombre:'',area:AREAS[0],responsable:'',estado:STATES[0],prioridad:PRIO[1],fecha:new Date().toISOString().split('T')[0]};
+  showModal(`<h3>${isEdit?'Editar':'Nuevo'} proyecto</h3>
+    <div class="form-row">
+      <div class="field"><label>Nombre del proyecto</label><input id="p-nombre" value="${escH(p.nombre)}" placeholder="Ej: Sistema de gestión de buques"></div>
+      <div class="field"><label>Área</label><select id="p-area">${AREAS.map(a=>`<option${a===p.area?' selected':''}>${a}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>Responsable</label><input id="p-resp" value="${escH(p.responsable)}" placeholder="Nombre del responsable"></div>
+      <div class="field"><label>Fecha de inicio</label><input type="date" id="p-fecha" value="${p.fecha}"></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>Estado</label><select id="p-estado">${STATES.map(s=>`<option${s===p.estado?' selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="field"><label>Prioridad</label><select id="p-prio">${PRIO.map(pr=>`<option${pr===p.prioridad?' selected':''}>${pr}</option>`).join('')}</select></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+      ${isEdit?`<button class="btn danger" onclick="deleteProject(${idx})"><i class="ti ti-trash"></i></button>`:''}
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn primary" onclick="saveProject(${isEdit?idx:-1})"><i class="ti ti-check"></i> Guardar</button>
+    </div>`);
+  if(isEdit){
+    bindAutoSave(['p-nombre','p-area','p-resp','p-fecha','p-estado','p-prio'],
+      ()=>({nombre:v('p-nombre'),area:v('p-area'),responsable:v('p-resp'),fecha:v('p-fecha'),estado:v('p-estado'),prioridad:v('p-prio')}),
+      (d)=>{if(!d.nombre)return;const a=DB.projects();a[idx]=d;DB.saveProjects(a);}
+    );
+  }
+}
+function saveProject(idx){
+  const p={nombre:v('p-nombre'),area:v('p-area'),responsable:v('p-resp'),fecha:v('p-fecha'),estado:v('p-estado'),prioridad:v('p-prio')};
+  if(!p.nombre){alert('El nombre es obligatorio');return;}
+  const arr=DB.projects();
+  if(idx>=0)arr[idx]=p;else arr.push(p);
+  DB.saveProjects(arr);closeModal();renderView(currentView);
+}
+function editProject(i){openProjectModal(DB.projects()[i],i);}
+function deleteProject(i){if(confirm('¿Eliminar proyecto?')){const a=DB.projects();a.splice(i,1);DB.saveProjects(a);closeModal();renderView(currentView);}}
+
+/* ── RELEVAMIENTOS ── */
+function renderRelevamientos(){
+  const relevs=DB.relevamientos();
+  if(!relevs.length)return `<div class="empty-state"><i class="ti ti-clipboard-list"></i><p>No hay relevamientos registrados.<br>Documenta el primer problema con el botón de arriba.</p></div>`;
+  return relevs.map((r,i)=>`<div class="req-item" onclick="viewRelevamiento(${i})">
+    <div class="req-id">REL-${String(i+1).padStart(3,'0')} · ${escH(r.proyecto||'Sin proyecto')}</div>
+    <div class="req-title">${escH(r.problema||'Sin título')}</div>
+    <div class="req-meta">
+      ${r.usuarios?`<span style="font-size:12px;color:var(--color-text-tertiary)"><i class="ti ti-users" style="font-size:12px;vertical-align:-1px"></i> ${escH(r.usuarios)}</span>`:''}
+      <span style="font-size:12px;color:var(--color-text-tertiary)">${r.fecha||''}</span>
+      ${r.reqs_generados?`<span class="badge analysis"><i class="ti ti-sparkles" style="font-size:11px"></i> ${r.reqs_generados} reqs</span>`:''}
+    </div>
+  </div>`).join('');
+}
+
+function openRelevamientoModal(rel,idx){
+  const isEdit=rel!==undefined;
+  const r=rel||{problema:'',flujo_actual:'',impacto:'',usuarios:'',reglas:'',proyecto:'',fecha:new Date().toISOString().split('T')[0]};
+  const projs=DB.projects();
+  showModal(`<h3>${isEdit?'Editar':'Nuevo'} relevamiento funcional</h3>
+    <div class="form-row">
+      <div class="field"><label>Proyecto asociado</label><select id="r-proyecto"><option value="">Sin proyecto</option>${projs.map(p=>`<option${p.nombre===r.proyecto?' selected':''}>${escH(p.nombre)}</option>`).join('')}</select></div>
+      <div class="field"><label>Fecha</label><input type="date" id="r-fecha" value="${r.fecha}"></div>
+    </div>
+    <div class="field"><label>Problema / necesidad del usuario *</label><textarea id="r-problema" placeholder="Describir el problema principal...">${escH(r.problema)}</textarea></div>
+    <div class="field"><label>Flujo actual (¿cómo se hace hoy?)</label><textarea id="r-flujo" placeholder="Proceso actual sin el sistema...">${escH(r.flujo_actual)}</textarea></div>
+    <div class="form-row">
+      <div class="field"><label>Impacto en el negocio</label><textarea id="r-impacto" style="min-height:60px" placeholder="Consecuencias si no se resuelve...">${escH(r.impacto)}</textarea></div>
+      <div class="field"><label>Usuarios involucrados</label><textarea id="r-usuarios" style="min-height:60px" placeholder="Ej: Supervisores, operadores...">${escH(r.usuarios)}</textarea></div>
+    </div>
+    <div class="field"><label>Reglas de negocio</label><textarea id="r-reglas" placeholder="Restricciones, condiciones especiales...">${escH(r.reglas)}</textarea></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn" onclick="saveRelevamiento(${isEdit?idx:-1},false)"><i class="ti ti-sparkles"></i> Guardar + generar con IA</button>
+      <button class="btn primary" onclick="saveRelevamiento(${isEdit?idx:-1},true)"><i class="ti ti-check"></i> Solo guardar</button>
+    </div>`);
+  if(isEdit){
+    bindAutoSave(['r-problema','r-flujo','r-impacto','r-usuarios','r-reglas','r-proyecto','r-fecha'],
+      ()=>({problema:v('r-problema'),flujo_actual:v('r-flujo'),impacto:v('r-impacto'),usuarios:v('r-usuarios'),reglas:v('r-reglas'),proyecto:v('r-proyecto'),fecha:v('r-fecha'),reqs_generados:rel.reqs_generados}),
+      (d)=>{if(!d.problema)return;const a=DB.relevamientos();a[idx]=d;DB.saveRelevamientos(a);}
+    );
+  }
+}
+
+async function saveRelevamiento(idx,soloGuardar){
+  const r={problema:v('r-problema'),flujo_actual:v('r-flujo'),impacto:v('r-impacto'),usuarios:v('r-usuarios'),reglas:v('r-reglas'),proyecto:v('r-proyecto'),fecha:v('r-fecha')};
+  if(!r.problema){alert('El campo "problema" es obligatorio');return;}
+  const arr=DB.relevamientos();
+  const newIdx=idx>=0?idx:arr.length;
+  if(idx>=0)arr[idx]={...arr[idx],...r};else arr.push(r);
+  DB.saveRelevamientos(arr);
+  closeModal();
+  if(!soloGuardar)await generarReqsDesdeRelevamiento(r,newIdx);
+  else renderView(currentView);
+}
+
+function viewRelevamiento(i){
+  const r=DB.relevamientos()[i];
+  showModal(`<h3>Relevamiento REL-${String(i+1).padStart(3,'0')}</h3>
+    <div>
+      ${r.proyecto?`<div class="detail-row"><div class="detail-label">Proyecto</div><div class="detail-value">${escH(r.proyecto)}</div></div>`:''}
+      <div class="detail-row"><div class="detail-label">Problema</div><div class="detail-value">${escH(r.problema)}</div></div>
+      ${r.flujo_actual?`<div class="detail-row"><div class="detail-label">Flujo actual</div><div class="detail-value">${escH(r.flujo_actual)}</div></div>`:''}
+      ${r.impacto?`<div class="detail-row"><div class="detail-label">Impacto</div><div class="detail-value">${escH(r.impacto)}</div></div>`:''}
+      ${r.usuarios?`<div class="detail-row"><div class="detail-label">Usuarios</div><div class="detail-value">${escH(r.usuarios)}</div></div>`:''}
+      ${r.reglas?`<div class="detail-row"><div class="detail-label">Reglas de negocio</div><div class="detail-value">${escH(r.reglas)}</div></div>`:''}
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;flex-wrap:wrap">
+      <button class="btn" onclick="closeModal()">Cerrar</button>
+      <button class="btn" onclick="closeModal();exportRelPDF(${i})"><i class="ti ti-file-export"></i> Exportar PDF</button>
+      <button class="btn" onclick="closeModal();openRelevamientoModal(DB.relevamientos()[${i}],${i})"><i class="ti ti-edit"></i> Editar</button>
+      <button class="btn primary" onclick="closeModal();generarReqsDesdeRelevamiento(DB.relevamientos()[${i}],${i})"><i class="ti ti-sparkles"></i> Generar con IA</button>
+    </div>`);
+}
+
+function exportRelPDF(i){
+  const r=DB.relevamientos()[i];
+  const id=`REL-${String(i+1).padStart(3,'0')}`;
+  const win=window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${id}</title>
+  <style>body{font-family:Arial,sans-serif;max-width:750px;margin:40px auto;color:#1a1a18;font-size:13px}
+  h1{font-size:18px;margin-bottom:4px}h2{font-size:13px;color:#888;font-weight:400;margin-bottom:32px}
+  .section{margin-bottom:20px}.label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#888;margin-bottom:4px}
+  .value{font-size:13px;line-height:1.7;border-left:2px solid #eee;padding-left:12px}
+  .footer{margin-top:48px;padding-top:12px;border-top:1px solid #eee;font-size:11px;color:#aaa;display:flex;justify-content:space-between}
+  @media print{button{display:none}}</style></head><body>
+  <h1>Relevamiento funcional — ${id}</h1>
+  <h2>${escH(r.proyecto||'Sin proyecto')} · ${r.fecha||''}</h2>
+  ${r.problema?`<div class="section"><div class="label">Problema / Necesidad</div><div class="value">${escH(r.problema).replace(/\n/g,'<br>')}</div></div>`:''}
+  ${r.flujo_actual?`<div class="section"><div class="label">Flujo actual</div><div class="value">${escH(r.flujo_actual).replace(/\n/g,'<br>')}</div></div>`:''}
+  ${r.impacto?`<div class="section"><div class="label">Impacto en el negocio</div><div class="value">${escH(r.impacto).replace(/\n/g,'<br>')}</div></div>`:''}
+  ${r.usuarios?`<div class="section"><div class="label">Usuarios involucrados</div><div class="value">${escH(r.usuarios).replace(/\n/g,'<br>')}</div></div>`:''}
+  ${r.reglas?`<div class="section"><div class="label">Reglas de negocio</div><div class="value">${escH(r.reglas).replace(/\n/g,'<br>')}</div></div>`:''}
+  <div class="footer"><span>ReqManager</span><span>Generado: ${new Date().toLocaleDateString('es')}</span></div>
+  <br><button onclick="window.print()">Imprimir / Guardar PDF</button>
+  </body></html>`);
+  win.document.close();
+}
+
+/* ── REQUERIMIENTOS ── */
+function renderRequerimientos(){
+  const reqs=DB.requerimientos();
+  if(!reqs.length)return `<div class="empty-state"><i class="ti ti-list-check"></i><p>No hay requerimientos registrados.<br>Genera con IA desde un relevamiento o crea manualmente.</p></div>`;
+  const projs=[...new Set(reqs.map(r=>r.proyecto).filter(Boolean))];
+  const filtros=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+    <select id="filter-proyecto" onchange="applyFilters()" style="width:auto;min-width:160px;font-size:12px;padding:5px 8px">
+      <option value="">Todos los proyectos</option>
+      ${projs.map(p=>`<option>${escH(p)}</option>`).join('')}
+    </select>
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:400;cursor:pointer;color:var(--color-text-secondary)">
+      <input type="checkbox" id="sel-all" onchange="toggleSelAll(this.checked)" style="width:14px;height:14px;cursor:pointer"> Seleccionar todos
+    </label>
+    <span id="sel-count" style="font-size:12px;color:var(--color-text-tertiary)"></span>
+  </div>`;
+  const tabs=`<div class="tab-row">${['Todos',...STATES].map((s,idx)=>`<div class="tab${idx===0?' active':''}" onclick="filterByTab(this,'${s}')">${s}</div>`).join('')}</div>`;
+  const list=reqs.map((r,i)=>`<div class="req-item" data-estado="${r.estado}" data-proyecto="${escH(r.proyecto||'')}" data-idx="${i}" style="display:flex;align-items:flex-start;gap:10px">
+    <input type="checkbox" class="req-checkbox" data-idx="${i}" onchange="updateSelCount()" onclick="event.stopPropagation()" style="width:15px;height:15px;margin-top:3px;cursor:pointer;flex-shrink:0">
+    <div style="flex:1;min-width:0" onclick="editReq(${i})">
+      <div class="req-id">RF-${String(i+1).padStart(3,'0')}${r.proyecto?' · '+escH(r.proyecto):''}</div>
+      <div class="req-title">${escH(r.titulo)}</div>
+      <div class="req-meta">
+        <span class="badge ${STATE_KEY[STATES.indexOf(r.estado)]||'pending'}">${r.estado}</span>
+        <span class="badge ${PRIO_KEY[PRIO.indexOf(r.prioridad)]||'medium'}">${r.prioridad}</span>
+        ${r.ia_generado?`<span style="font-size:11px;color:var(--color-text-tertiary)"><i class="ti ti-sparkles" style="font-size:11px"></i> IA</span>`:''}
+      </div>
+    </div>
+  </div>`).join('');
+  return filtros+tabs+`<div id="req-list">${list}</div>`;
+}
+
+function applyFilters(){
+  const proyecto=document.getElementById('filter-proyecto')?.value||'';
+  const activeTab=document.querySelector('.tab.active')?.textContent||'Todos';
+  document.querySelectorAll('.req-item[data-estado]').forEach(item=>{
+    const matchTab=activeTab==='Todos'||item.dataset.estado===activeTab;
+    const matchProj=!proyecto||item.dataset.proyecto===proyecto;
+    item.style.display=(matchTab&&matchProj)?'':'none';
+  });
+  updateSelCount();
+}
+
+function filterByTab(el,estado){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  applyFilters();
+}
+
+function toggleSelAll(checked){
+  document.querySelectorAll('.req-item[data-estado]').forEach(item=>{
+    if(item.style.display!=='none'){
+      const cb=item.querySelector('.req-checkbox');
+      if(cb)cb.checked=checked;
+    }
+  });
+  updateSelCount();
+}
+
+function updateSelCount(){
+  const total=document.querySelectorAll('.req-checkbox:checked').length;
+  const el=document.getElementById('sel-count');
+  if(el)el.textContent=total>0?`${total} seleccionado${total>1?'s':''}  ·  clic en "Exportar PDF" para exportarlos`:'';
+  const selAll=document.getElementById('sel-all');
+  if(selAll){
+    const visible=[...document.querySelectorAll('.req-item[data-estado]')].filter(i=>i.style.display!=='none');
+    const allChecked=visible.length>0&&visible.every(i=>i.querySelector('.req-checkbox')?.checked);
+    selAll.checked=allChecked;
+  }
+}
+
+function exportReqsPDF(){
+  const allReqs=DB.requerimientos();
+  if(!allReqs.length){alert('No hay requerimientos para exportar.');return;}
+  const checkedIdxs=[...document.querySelectorAll('.req-checkbox:checked')].map(cb=>parseInt(cb.dataset.idx));
+  let toExport;
+  let subtitle='';
+  if(checkedIdxs.length>0){
+    toExport=checkedIdxs.map(i=>({...allReqs[i],_origIdx:i}));
+    subtitle=`${toExport.length} requerimiento${toExport.length>1?'s':''} seleccionado${toExport.length>1?'s':''}`;
+  } else {
+    const visible=[...document.querySelectorAll('.req-item[data-estado]')].filter(i=>i.style.display!=='none').map(i=>parseInt(i.dataset.idx));
+    toExport=visible.map(i=>({...allReqs[i],_origIdx:i}));
+    const proyecto=document.getElementById('filter-proyecto')?.value||'';
+    const tab=document.querySelector('.tab.active')?.textContent||'Todos';
+    subtitle=`${toExport.length} requerimiento${toExport.length>1?'s':''}${proyecto?' · '+proyecto:''}${tab!=='Todos'?' · '+tab:''}`;
+  }
+  if(!toExport.length){alert('No hay requerimientos visibles para exportar.');return;}
+  const win=window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Requerimientos</title>
+  <style>body{font-family:Arial,sans-serif;max-width:820px;margin:40px auto;color:#1a1a18;font-size:13px}
+  h1{font-size:18px;margin-bottom:4px}h2{font-size:12px;color:#888;font-weight:400;margin-bottom:28px}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{text-align:left;background:#f5f5f4;padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #ddd}
+  td{padding:9px 10px;border-bottom:0.5px solid #eee;vertical-align:top}
+  .badge{display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:600}
+  .high{background:#FCEBEB;color:#791F1F}.medium{background:#FAEEDA;color:#633806}.low{background:#EAF3DE;color:#27500A}
+  .ia{font-size:10px;color:#888}
+  .footer{margin-top:40px;padding-top:10px;border-top:1px solid #eee;font-size:11px;color:#aaa;display:flex;justify-content:space-between}
+  @media print{button{display:none}}</style></head><body>
+  <h1>Requerimientos funcionales</h1>
+  <h2>${escH(subtitle)} · Generado: ${new Date().toLocaleDateString('es')}</h2>
+  <table>
+  <thead><tr><th>#</th><th>Título</th><th>Proyecto</th><th>Estado</th><th>Prioridad</th><th>Descripción</th><th>Criterios</th></tr></thead>
+  <tbody>${toExport.map((r)=>`<tr>
+    <td>RF-${String(r._origIdx+1).padStart(3,'0')}${r.ia_generado?'<br><span class="ia">✦ IA</span>':''}</td>
+    <td>${escH(r.titulo)}</td>
+    <td>${escH(r.proyecto||'-')}</td>
+    <td>${r.estado}</td>
+    <td><span class="badge ${PRIO_KEY[PRIO.indexOf(r.prioridad)]||'medium'}">${r.prioridad}</span></td>
+    <td>${escH(r.descripcion||'-')}</td>
+    <td>${escH(r.criterios||'-')}</td>
+  </tr>`).join('')}</tbody></table>
+  <div class="footer"><span>ReqManager</span><span>${new Date().toLocaleDateString('es')}</span></div>
+  <br><button onclick="window.print()">Imprimir / Guardar PDF</button>
+  </body></html>`);
+  win.document.close();
+}
+
+function openReqModal(req,idx){
+  const isEdit=req!==undefined;
+  const r=req||{titulo:'',descripcion:'',criterios:'',prioridad:PRIO[1],estado:STATES[0],proyecto:'',fecha:new Date().toISOString().split('T')[0]};
+  const projs=DB.projects();
+  showModal(`<h3>${isEdit?'Editar':'Nuevo'} requerimiento</h3>
+    <div class="form-row">
+      <div class="field"><label>Proyecto</label><select id="rq-proyecto"><option value="">Sin proyecto</option>${projs.map(p=>`<option${p.nombre===r.proyecto?' selected':''}>${escH(p.nombre)}</option>`).join('')}</select></div>
+      <div class="field"><label>Prioridad</label><select id="rq-prio">${PRIO.map(p=>`<option${p===r.prioridad?' selected':''}>${p}</option>`).join('')}</select></div>
+    </div>
+    <div class="field"><label>Título *</label><input id="rq-titulo" value="${escH(r.titulo)}" placeholder="Ej: El sistema debe permitir registrar llegada de buques"></div>
+    <div class="field"><label>Descripción</label><textarea id="rq-desc">${escH(r.descripcion||'')}</textarea></div>
+    <div class="field"><label>Criterios de aceptación</label><textarea id="rq-crit" style="min-height:60px">${escH(r.criterios||'')}</textarea></div>
+    <div class="field">
+      <label>Estado</label>
+      <div class="status-flow">${STATES.map(s=>`<button class="status-btn${s===r.estado?' active':''}" onclick="selectStatus(this,'${s}')">${s}</button>`).join('')}</div>
+      <input type="hidden" id="rq-estado" value="${r.estado}">
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+      ${isEdit?`<button class="btn danger" onclick="deleteReq(${idx})"><i class="ti ti-trash"></i></button>`:''}
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn primary" onclick="saveReq(${isEdit?idx:-1})"><i class="ti ti-check"></i> Guardar</button>
+    </div>`);
+  if(isEdit){
+    bindAutoSave(['rq-titulo','rq-desc','rq-crit','rq-prio','rq-proyecto'],
+      ()=>({titulo:v('rq-titulo'),descripcion:v('rq-desc'),criterios:v('rq-crit'),prioridad:v('rq-prio'),estado:v('rq-estado'),proyecto:v('rq-proyecto'),fecha:r.fecha,ia_generado:r.ia_generado}),
+      (d)=>{if(!d.titulo)return;const a=DB.requerimientos();a[idx]=d;DB.saveRequerimientos(a);}
+    );
+  }
+}
+
+function selectStatus(el,estado){
+  document.querySelectorAll('.status-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('rq-estado').value=estado;
+}
+
+function saveReq(idx){
+  const r={titulo:v('rq-titulo'),descripcion:v('rq-desc'),criterios:v('rq-crit'),prioridad:v('rq-prio'),estado:v('rq-estado'),proyecto:v('rq-proyecto'),fecha:new Date().toISOString().split('T')[0]};
+  if(!r.titulo){alert('El título es obligatorio');return;}
+  const arr=DB.requerimientos();
+  if(idx>=0)arr[idx]=r;else arr.push(r);
+  DB.saveRequerimientos(arr);closeModal();renderView(currentView);
+}
+function editReq(i){openReqModal(DB.requerimientos()[i],i);}
+function deleteReq(i){if(confirm('¿Eliminar?')){const a=DB.requerimientos();a.splice(i,1);DB.saveRequerimientos(a);closeModal();renderView(currentView);}}
+
+/* ── IA GENERAR REQS ── */
+async function generarReqsDesdeRelevamiento(rel,relIdx){
+  navigate('requerimientos');
+  const cont=document.getElementById('content');
+  cont.innerHTML=`<div class="card"><div class="ai-box">
+    <div class="ai-header"><i class="ti ti-sparkles"></i> Generando requerimientos funcionales con IA<span class="loading-dots"></span></div>
+    <div class="ai-output" id="ai-stream">Analizando el relevamiento funcional...</div>
+  </div></div>`;
+  const prompt=`Eres un analista de requerimientos experto. Analiza este relevamiento y genera requerimientos funcionales claros.
+
+RELEVAMIENTO:
+- Problema: ${rel.problema}
+- Flujo actual: ${rel.flujo_actual||'No especificado'}
+- Impacto: ${rel.impacto||'No especificado'}
+- Usuarios: ${rel.usuarios||'No especificado'}
+- Reglas de negocio: ${rel.reglas||'No especificadas'}
+
+Genera entre 3 y 6 requerimientos funcionales. Responde SOLO con este JSON, sin texto adicional ni backticks:
+{"requerimientos":[{"titulo":"Título corto","descripcion":"Qué debe hacer el sistema (el QUÉ, no el CÓMO)","prioridad":"Alta|Media|Baja","criterios":"Criterios de aceptación verificables"}]}`;
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1500,messages:[{role:'user',content:prompt}]})});
+    const data=await res.json();
+    const text=data.content?.map(c=>c.text||'').join('')||'';
+    const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+    const reqs=DB.requerimientos();let added=0;
+    parsed.requerimientos.forEach(r=>{reqs.push({titulo:r.titulo,descripcion:r.descripcion,prioridad:r.prioridad,criterios:r.criterios,estado:'Pendiente',proyecto:rel.proyecto,ia_generado:true,fecha:new Date().toISOString().split('T')[0]});added++;});
+    DB.saveRequerimientos(reqs);
+    const relevs=DB.relevamientos();if(relevs[relIdx])relevs[relIdx].reqs_generados=added;DB.saveRelevamientos(relevs);
+    renderView('requerimientos');
+  }catch(e){document.getElementById('ai-stream').textContent='Error al conectar con la IA.\n\nDetalle: '+e.message;}
+}
+
+/* ── ESPECIFICACIÓN ERS ── */
+function renderEspecificacion(){
+  const ers=DB.ers();
+  if(!ers.length)return `<div class="empty-state"><i class="ti ti-file-description"></i><p>No hay especificaciones generadas.<br>Selecciona un proyecto y genera la ERS con IA.</p></div>`;
+  return ers.map((e,i)=>`<div class="req-item" onclick="viewErs(${i})">
+    <div class="req-id">ERS-${String(i+1).padStart(3,'0')} · ${escH(e.proyecto||'Sin proyecto')}</div>
+    <div class="req-title">${escH(e.objetivo||'Especificación de requerimientos')}</div>
+    <div class="req-meta">
+      <span style="font-size:12px;color:var(--color-text-tertiary)">${e.fecha||''}</span>
+      <span class="badge analysis">${e.total_reqs||0} requerimientos</span>
+      <span style="font-size:11px;color:var(--color-text-tertiary)"><i class="ti ti-sparkles" style="font-size:11px"></i> IA</span>
+    </div>
+  </div>`).join('');
+}
+
+function openErsModal(){
+  const projs=DB.projects();
+  if(!projs.length){alert('Primero crea al menos un proyecto.');return;}
+  showModal(`<h3>Generar Especificación de Requerimientos (ERS)</h3>
+    <div class="field"><label>Proyecto</label><select id="ers-proyecto"><option value="">Seleccionar proyecto...</option>${projs.map(p=>`<option>${escH(p.nombre)}</option>`).join('')}</select></div>
+    <div style="margin:12px 0;padding:12px;background:var(--color-background-secondary);border-radius:var(--border-radius-md);font-size:12px;color:var(--color-text-secondary);line-height:1.6">
+      <i class="ti ti-info-circle"></i> La IA tomará todos los relevamientos y requerimientos del proyecto seleccionado y generará un documento ERS completo con: objetivo, alcance, requerimientos funcionales y no funcionales, reglas de negocio, y criterios de aceptación.
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn primary" onclick="generarERS()"><i class="ti ti-sparkles"></i> Generar ERS</button>
+    </div>`);
+}
+
+async function generarERS(){
+  const proyecto=v('ers-proyecto');
+  if(!proyecto){alert('Selecciona un proyecto');return;}
+  closeModal();
+  navigate('especificacion');
+  const cont=document.getElementById('content');
+  cont.innerHTML=`<div class="card"><div class="ai-box">
+    <div class="ai-header"><i class="ti ti-sparkles"></i> Generando Especificación de Requerimientos de Software<span class="loading-dots"></span></div>
+    <div class="ai-output" id="ai-stream">Recopilando datos del proyecto "${escH(proyecto)}"...</div>
+  </div></div>`;
+
+  const relevs=DB.relevamientos().filter(r=>r.proyecto===proyecto);
+  const reqs=DB.requerimientos().filter(r=>r.proyecto===proyecto);
+  const proj=DB.projects().find(p=>p.nombre===proyecto)||{};
+
+  const prompt=`Eres un analista de sistemas experto. Genera una Especificación de Requerimientos de Software (ERS) formal y completa para el siguiente proyecto.
+
+DATOS DEL PROYECTO:
+- Nombre: ${proyecto}
+- Área: ${proj.area||'No especificada'}
+- Responsable: ${proj.responsable||'No especificado'}
+- Estado: ${proj.estado||''}
+
+RELEVAMIENTOS (${relevs.length}):
+${relevs.map((r,i)=>`${i+1}. Problema: ${r.problema}. Flujo actual: ${r.flujo_actual||'N/A'}. Impacto: ${r.impacto||'N/A'}. Usuarios: ${r.usuarios||'N/A'}. Reglas: ${r.reglas||'N/A'}`).join('\n')||'No hay relevamientos registrados.'}
+
+REQUERIMIENTOS FUNCIONALES (${reqs.length}):
+${reqs.map((r,i)=>`RF-${i+1}: ${r.titulo}. ${r.descripcion||''}. Criterios: ${r.criterios||'N/A'}. Prioridad: ${r.prioridad}`).join('\n')||'No hay requerimientos registrados.'}
+
+Genera la ERS completa. Responde SOLO con este JSON, sin texto adicional ni backticks:
+{
+  "objetivo": "Objetivo del sistema en 1-2 oraciones",
+  "alcance": "Descripción del alcance del sistema",
+  "stakeholders": ["Lista de stakeholders identificados"],
+  "reqs_funcionales": [{"id":"RF-01","titulo":"titulo","descripcion":"descripcion completa","prioridad":"Alta|Media|Baja","criterios":"criterios de aceptación"}],
+  "reqs_no_funcionales": [{"categoria":"Seguridad|Desempeño|Usabilidad|Confiabilidad|Escalabilidad","descripcion":"descripcion"}],
+  "reglas_negocio": ["Regla de negocio 1", "Regla 2"],
+  "restricciones": ["Restricción técnica o de negocio"],
+  "supuestos": ["Supuesto 1"]
+}`;
+
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2500,messages:[{role:'user',content:prompt}]})});
+    const data=await res.json();
+    const text=data.content?.map(c=>c.text||'').join('')||'';
+    const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+    const ersArr=DB.ers();
+    const newErs={proyecto,objetivo:parsed.objetivo,alcance:parsed.alcance,stakeholders:parsed.stakeholders||[],reqs_funcionales:parsed.reqs_funcionales||[],reqs_no_funcionales:parsed.reqs_no_funcionales||[],reglas_negocio:parsed.reglas_negocio||[],restricciones:parsed.restricciones||[],supuestos:parsed.supuestos||[],total_reqs:(parsed.reqs_funcionales||[]).length,fecha:new Date().toISOString().split('T')[0]};
+    ersArr.push(newErs);
+    DB.saveErs(ersArr);
+    renderView('especificacion');
+  }catch(e){document.getElementById('ai-stream').textContent='Error al generar la ERS.\n\nDetalle: '+e.message;}
+}
+
+function viewErs(i){
+  const e=DB.ers()[i];
+  const html=`<h3>ERS-${String(i+1).padStart(3,'0')} — ${escH(e.proyecto)}</h3>
+    <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn sm" onclick="closeModal();exportErsPDF(${i})"><i class="ti ti-file-export"></i> Exportar PDF</button>
+      <button class="btn sm danger" onclick="deleteErs(${i})"><i class="ti ti-trash"></i></button>
+    </div>
+    <div class="ers-section"><h4>Objetivo del sistema</h4><p>${escH(e.objetivo)}</p></div>
+    <div class="ers-section"><h4>Alcance</h4><p>${escH(e.alcance)}</p></div>
+    ${e.stakeholders?.length?`<div class="ers-section"><h4>Stakeholders</h4><ul>${e.stakeholders.map(s=>`<li>${escH(s)}</li>`).join('')}</ul></div>`:''}
+    <div class="ers-section"><h4>Requerimientos funcionales</h4>
+      ${e.reqs_funcionales?.map(r=>`<div class="ers-req-item">
+        <div class="ers-req-id">${r.id} · <span class="badge ${PRIO_KEY[PRIO.indexOf(r.prioridad)]||'medium'}">${r.prioridad}</span></div>
+        <div class="ers-req-title">${escH(r.titulo)}</div>
+        <div class="ers-req-desc">${escH(r.descripcion)}</div>
+        ${r.criterios?`<div style="font-size:11px;color:var(--color-text-tertiary);margin-top:4px"><b>Criterios:</b> ${escH(r.criterios)}</div>`:''}
+      </div>`).join('')||'<p style="font-size:12px;color:var(--color-text-tertiary)">Sin requerimientos</p>'}
+    </div>
+    ${e.reqs_no_funcionales?.length?`<div class="ers-section"><h4>Requerimientos no funcionales</h4>
+      ${e.reqs_no_funcionales.map(r=>`<div class="ers-req-item"><div class="ers-req-id">${escH(r.categoria)}</div><div class="ers-req-desc">${escH(r.descripcion)}</div></div>`).join('')}
+    </div>`:''}
+    ${e.reglas_negocio?.length?`<div class="ers-section"><h4>Reglas de negocio</h4><ul>${e.reglas_negocio.map(r=>`<li>${escH(r)}</li>`).join('')}</ul></div>`:''}
+    ${e.restricciones?.length?`<div class="ers-section"><h4>Restricciones</h4><ul>${e.restricciones.map(r=>`<li>${escH(r)}</li>`).join('')}</ul></div>`:''}
+    ${e.supuestos?.length?`<div class="ers-section"><h4>Supuestos</h4><ul>${e.supuestos.map(s=>`<li>${escH(s)}</li>`).join('')}</ul></div>`:''}
+    <div style="display:flex;justify-content:flex-end;margin-top:8px">
+      <button class="btn" onclick="closeModal()">Cerrar</button>
+    </div>`;
+  showModal(html);
+}
+
+function deleteErs(i){if(confirm('¿Eliminar esta ERS?')){const a=DB.ers();a.splice(i,1);DB.saveErs(a);closeModal();renderView(currentView);}}
+
+function exportErsPDF(i){
+  const e=DB.ers()[i];
+  const id=`ERS-${String(i+1).padStart(3,'0')}`;
+  const win=window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${id}</title>
+  <style>body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;color:#1a1a18;font-size:13px;line-height:1.6}
+  h1{font-size:20px;margin-bottom:4px}h2{font-size:12px;color:#888;font-weight:400;margin-bottom:32px}
+  h3{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#555;border-bottom:1px solid #eee;padding-bottom:6px;margin:24px 0 12px}
+  .req-item{border:1px solid #eee;border-radius:6px;padding:10px 14px;margin-bottom:8px}
+  .req-id{font-size:11px;font-weight:700;color:#888}
+  .req-title{font-size:13px;font-weight:600;margin:3px 0}
+  .req-desc{font-size:12px;color:#555}
+  .badge{display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;font-weight:600}
+  .high{background:#FCEBEB;color:#791F1F}.medium{background:#FAEEDA;color:#633806}.low{background:#EAF3DE;color:#27500A}
+  ul{padding-left:20px}li{margin-bottom:4px;font-size:13px}
+  .footer{margin-top:48px;padding-top:10px;border-top:1px solid #eee;font-size:11px;color:#aaa;display:flex;justify-content:space-between}
+  @media print{button{display:none}}</style></head><body>
+  <h1>Especificación de Requerimientos de Software</h1>
+  <h2>${escH(e.proyecto)} · ${id} · ${e.fecha||''}</h2>
+  <h3>Objetivo del sistema</h3><p>${escH(e.objetivo)}</p>
+  <h3>Alcance</h3><p>${escH(e.alcance)}</p>
+  ${e.stakeholders?.length?`<h3>Stakeholders</h3><ul>${e.stakeholders.map(s=>`<li>${escH(s)}</li>`).join('')}</ul>`:''}
+  <h3>Requerimientos funcionales</h3>
+  ${e.reqs_funcionales?.map(r=>`<div class="req-item">
+    <div class="req-id">${r.id} &nbsp;<span class="badge ${PRIO_KEY[PRIO.indexOf(r.prioridad)]||'medium'}">${r.prioridad}</span></div>
+    <div class="req-title">${escH(r.titulo)}</div>
+    <div class="req-desc">${escH(r.descripcion)}</div>
+    ${r.criterios?`<div style="font-size:11px;margin-top:4px;color:#777"><b>Criterios:</b> ${escH(r.criterios)}</div>`:''}
+  </div>`).join('')||'<p>Sin requerimientos</p>'}
+  ${e.reqs_no_funcionales?.length?`<h3>Requerimientos no funcionales</h3>${e.reqs_no_funcionales.map(r=>`<div class="req-item"><div class="req-id">${escH(r.categoria)}</div><div class="req-desc">${escH(r.descripcion)}</div></div>`).join('')}`:''}
+  ${e.reglas_negocio?.length?`<h3>Reglas de negocio</h3><ul>${e.reglas_negocio.map(r=>`<li>${escH(r)}</li>`).join('')}</ul>`:''}
+  ${e.restricciones?.length?`<h3>Restricciones</h3><ul>${e.restricciones.map(r=>`<li>${escH(r)}</li>`).join('')}</ul>`:''}
+  ${e.supuestos?.length?`<h3>Supuestos</h3><ul>${e.supuestos.map(s=>`<li>${escH(s)}</li>`).join('')}</ul>`:''}
+  <div class="footer"><span>ReqManager</span><span>Generado: ${new Date().toLocaleDateString('es')}</span></div>
+  <br><button onclick="window.print()">Imprimir / Guardar PDF</button>
+  </body></html>`);
+  win.document.close();
+}
+
+/* ── SEGUIMIENTO ── */
+function renderSeguimiento(){
+  const reqs=DB.requerimientos();
+  return `<div class="kanban-grid">${STATES.map((s,i)=>{
+    const items=reqs.filter(r=>r.estado===s);
+    return `<div class="kanban-col">
+      <div class="kanban-header"><span>${s}</span><span class="badge ${STATE_KEY[i]}">${items.length}</span></div>
+      ${items.length?items.map(r=>`<div class="kanban-card" onclick="editReq(${reqs.indexOf(r)})">
+        <div class="kc-title">${escH(r.titulo)}</div>
+        <span class="badge ${PRIO_KEY[PRIO.indexOf(r.prioridad)]||'medium'}" style="font-size:10px">${r.prioridad}</span>
+      </div>`).join(''):`<div class="kanban-empty">Vacío</div>`}
+    </div>`;
+  }).join('')}</div>`;
+}
+
+/* ── EVIDENCIAS ── */
+function renderEvidencias(){
+  return `<div class="card">
+    <div style="font-size:13px;font-weight:500;margin-bottom:12px">Adjuntar evidencias</div>
+    <div style="border:1.5px dashed var(--color-border-secondary);border-radius:var(--border-radius-lg);padding:40px;text-align:center;color:var(--color-text-tertiary)">
+      <i class="ti ti-cloud-upload" style="font-size:32px;margin-bottom:10px;display:block"></i>
+      <p style="font-size:13px;margin-bottom:6px">Arrastra imágenes, PDFs o documentos aquí</p>
+      <p style="font-size:11px;margin-bottom:16px">Formatos: PNG, JPG, PDF, DOCX, MP4, XLSX</p>
+      <button class="btn" onclick="alert('Para habilitar carga de archivos, conecta a Google Drive o un servidor.')"><i class="ti ti-upload"></i> Seleccionar archivo</button>
+    </div>
+    <div style="margin-top:14px;font-size:12px;color:var(--color-text-tertiary);display:flex;align-items:center;gap:6px">
+      <i class="ti ti-info-circle"></i> En producción esta sección se conecta a Google Drive.
+    </div>
+  </div>`;
+}
+
+/* ── UTILS ── */
+function showModal(html){document.getElementById('modal-container').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal">${html}</div></div>`;}
+function closeModal(){document.getElementById('modal-container').innerHTML='';}
+function v(id){return document.getElementById(id)?.value||'';}
+function escH(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+navigate('dashboard');
+
+/* ── BACKUP / RESTAURAR ── */
+function exportarDatos(){
+  const data={
+    version:'1.0',
+    fecha:new Date().toISOString(),
+    projects:DB.projects(),
+    relevamientos:DB.relevamientos(),
+    requerimientos:DB.requerimientos(),
+    ers:DB.ers()
+  };
+  const json=JSON.stringify(data,null,2);
+  const blob=new Blob([json],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='reqmanager_backup_'+new Date().toISOString().split('T')[0]+'.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importarDatos(input){
+  const file=input.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const data=JSON.parse(e.target.result);
+      if(!data.projects&&!data.relevamientos&&!data.requerimientos){
+        alert('El archivo no parece ser un backup válido de ReqManager.');
+        return;
+      }
+      const total=(data.projects||[]).length+(data.relevamientos||[]).length+(data.requerimientos||[]).length+(data.ers||[]).length;
+      if(!confirm(`Se encontraron ${total} registros en el backup:\n\n- ${(data.projects||[]).length} proyectos\n- ${(data.relevamientos||[]).length} relevamientos\n- ${(data.requerimientos||[]).length} requerimientos\n- ${(data.ers||[]).length} especificaciones ERS\n\n¿Deseas importar? Los datos actuales serán reemplazados.`))return;
+      if(data.projects) DB.saveProjects(data.projects);
+      if(data.relevamientos) DB.saveRelevamientos(data.relevamientos);
+      if(data.requerimientos) DB.saveRequerimientos(data.requerimientos);
+      if(data.ers) DB.saveErs(data.ers);
+      input.value='';
+      alert('¡Datos importados correctamente!');
+      navigate('dashboard');
+    }catch(err){
+      alert('Error al leer el archivo: '+err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+</script>
+</body>
+</html>
