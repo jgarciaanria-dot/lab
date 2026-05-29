@@ -380,6 +380,10 @@ function openRelevamientoModal(rel,idx){
       <div class="field"><label>Fecha</label><input type="date" id="r-fecha" value="${r.fecha}"></div>
     </div>
     <div class="field"><label>Problema / necesidad del usuario *</label><textarea id="r-problema" placeholder="Describir el problema principal...">${escH(r.problema)}</textarea></div>
+    <div style="margin:-6px 0 10px;display:flex;justify-content:flex-end">
+      <button class="btn sm" onclick="completarRelevamientoConIA()" style="gap:5px;color:var(--color-text-info);border-color:rgba(24,95,165,0.3)"><i class="ti ti-sparkles" style="font-size:12px"></i> Completar campos con IA</button>
+    </div>
+    <div id="ai-rel-status" style="display:none;font-size:12px;color:var(--color-text-secondary);padding:8px 12px;background:var(--color-background-secondary);border-radius:6px;margin-bottom:10px"></div>
     <div class="field"><label>Flujo actual (¿cómo se hace hoy?)</label><textarea id="r-flujo" placeholder="Proceso actual sin el sistema...">${escH(r.flujo_actual)}</textarea></div>
     <div class="form-row">
       <div class="field"><label>Impacto en el negocio</label><textarea id="r-impacto" style="min-height:60px" placeholder="Consecuencias si no se resuelve...">${escH(r.impacto)}</textarea></div>
@@ -388,7 +392,7 @@ function openRelevamientoModal(rel,idx){
     <div class="field"><label>Reglas de negocio</label><textarea id="r-reglas" placeholder="Restricciones, condiciones especiales...">${escH(r.reglas)}</textarea></div>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap">
       <button class="btn" onclick="closeModal()">Cancelar</button>
-      <button class="btn" onclick="saveRelevamiento(${isEdit?idx:-1},false)"><i class="ti ti-sparkles"></i> Guardar + generar con IA</button>
+      <button class="btn" onclick="saveRelevamiento(${isEdit?idx:-1},false)"><i class="ti ti-sparkles"></i> Guardar + generar reqs con IA</button>
       <button class="btn primary" onclick="saveRelevamiento(${isEdit?idx:-1},true)"><i class="ti ti-check"></i> Solo guardar</button>
     </div>`);
   if(isEdit){
@@ -396,6 +400,50 @@ function openRelevamientoModal(rel,idx){
       ()=>({problema:v('r-problema'),flujo_actual:v('r-flujo'),impacto:v('r-impacto'),usuarios:v('r-usuarios'),reglas:v('r-reglas'),proyecto:v('r-proyecto'),fecha:v('r-fecha'),reqs_generados:rel.reqs_generados}),
       (d)=>{if(!d.problema)return;const a=DB.relevamientos();a[idx]=d;DB.saveRelevamientos(a);}
     );
+  }
+}
+
+async function completarRelevamientoConIA(){
+  if(!checkApiKey())return;
+  const problema=v('r-problema').trim();
+  if(!problema){alert('Escribe el problema primero para que la IA pueda ayudarte.');return;}
+  const proyecto=v('r-proyecto');
+  const status=document.getElementById('ai-rel-status');
+  status.style.display='block';
+  status.innerHTML='<i class="ti ti-sparkles" style="font-size:12px;vertical-align:-1px"></i> Analizando el problema<span class="loading-dots"></span>';
+
+  const prompt=`Eres un analista funcional experto. A partir del problema descrito, completa los campos de un relevamiento funcional.
+
+PROBLEMA: ${problema}
+PROYECTO: ${proyecto||'No especificado'}
+
+Responde SOLO con este JSON, sin texto adicional ni backticks:
+{
+  "flujo_actual": "Descripción de cómo se maneja este problema hoy sin el sistema (proceso manual, planilla, etc.)",
+  "impacto": "Consecuencias concretas en el negocio si no se resuelve este problema",
+  "usuarios": "Roles o personas involucradas en este proceso",
+  "reglas": "Reglas de negocio, restricciones o condiciones especiales relevantes"
+}`;
+
+  try{
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${getApiKey()}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})});
+    const data=await res.json();
+    if(data.error){status.innerHTML='<i class="ti ti-alert-circle" style="font-size:12px"></i> Error: '+data.error.message;return;}
+    const text=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
+    const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+    // Llenar campos solo si están vacíos
+    const flujo=document.getElementById('r-flujo');
+    const impacto=document.getElementById('r-impacto');
+    const usuarios=document.getElementById('r-usuarios');
+    const reglas=document.getElementById('r-reglas');
+    if(flujo&&!flujo.value)flujo.value=parsed.flujo_actual||'';
+    if(impacto&&!impacto.value)impacto.value=parsed.impacto||'';
+    if(usuarios&&!usuarios.value)usuarios.value=parsed.usuarios||'';
+    if(reglas&&!reglas.value)reglas.value=parsed.reglas||'';
+    status.innerHTML='<i class="ti ti-check" style="font-size:12px;color:var(--color-text-success)"></i> Campos completados con IA — revisa y ajusta según sea necesario.';
+    status.style.color='var(--color-text-success)';
+  }catch(e){
+    status.innerHTML='<i class="ti ti-alert-circle" style="font-size:12px"></i> Error al conectar con la IA: '+e.message;
   }
 }
 
@@ -610,7 +658,7 @@ function exportReqsPDF(){
 
 function openReqModal(req,idx){
   const isEdit=req!==undefined;
-  const r=req||{titulo:'',descripcion:'',criterios:'',prioridad:PRIO[1],estado:STATES[0],proyecto:'',fecha:new Date().toISOString().split('T')[0]};
+  const r=req||{titulo:'',descripcion:'',criterios:'',prioridad:PRIO[1],estado:STATES[0],proyecto:'',fecha:new Date().toISOString().split('T')[0],esfuerzo_horas:'',fecha_estimada:''};
   const projs=DB.projects();
   showModal(`<h3>${isEdit?'Editar':'Nuevo'} requerimiento</h3>
     <div class="form-row">
@@ -620,6 +668,10 @@ function openReqModal(req,idx){
     <div class="field"><label>Título *</label><input id="rq-titulo" value="${escH(r.titulo)}" placeholder="Ej: El sistema debe permitir registrar llegada de buques"></div>
     <div class="field"><label>Descripción</label><textarea id="rq-desc">${escH(r.descripcion||'')}</textarea></div>
     <div class="field"><label>Criterios de aceptación</label><textarea id="rq-crit" style="min-height:60px">${escH(r.criterios||'')}</textarea></div>
+    <div class="form-row">
+      <div class="field"><label>Esfuerzo estimado (horas)</label><input type="number" id="rq-esfuerzo" value="${r.esfuerzo_horas||''}" placeholder="Ej: 16" min="0"></div>
+      <div class="field"><label>Fecha estimada de entrega</label><input type="date" id="rq-fecha-est" value="${r.fecha_estimada||''}"></div>
+    </div>
     <div class="field">
       <label>Estado</label>
       <div class="status-flow">${STATES.map(s=>`<button class="status-btn${s===r.estado?' active':''}" onclick="selectStatus(this,'${s}')">${s}</button>`).join('')}</div>
@@ -631,8 +683,8 @@ function openReqModal(req,idx){
       <button class="btn primary" onclick="saveReq(${isEdit?idx:-1})"><i class="ti ti-check"></i> Guardar</button>
     </div>`);
   if(isEdit){
-    bindAutoSave(['rq-titulo','rq-desc','rq-crit','rq-prio','rq-proyecto'],
-      ()=>({titulo:v('rq-titulo'),descripcion:v('rq-desc'),criterios:v('rq-crit'),prioridad:v('rq-prio'),estado:v('rq-estado'),proyecto:v('rq-proyecto'),fecha:r.fecha,ia_generado:r.ia_generado}),
+    bindAutoSave(['rq-titulo','rq-desc','rq-crit','rq-prio','rq-proyecto','rq-esfuerzo','rq-fecha-est'],
+      ()=>({titulo:v('rq-titulo'),descripcion:v('rq-desc'),criterios:v('rq-crit'),prioridad:v('rq-prio'),estado:v('rq-estado'),proyecto:v('rq-proyecto'),fecha:r.fecha,ia_generado:r.ia_generado,esfuerzo_horas:v('rq-esfuerzo'),fecha_estimada:v('rq-fecha-est')}),
       (d)=>{if(!d.titulo)return;const a=DB.requerimientos();a[idx]=d;DB.saveRequerimientos(a);}
     );
   }
@@ -645,9 +697,10 @@ function selectStatus(el,estado){
 }
 
 function saveReq(idx){
-  const r={titulo:v('rq-titulo'),descripcion:v('rq-desc'),criterios:v('rq-crit'),prioridad:v('rq-prio'),estado:v('rq-estado'),proyecto:v('rq-proyecto'),fecha:new Date().toISOString().split('T')[0]};
+  const r={titulo:v('rq-titulo'),descripcion:v('rq-desc'),criterios:v('rq-crit'),prioridad:v('rq-prio'),estado:v('rq-estado'),proyecto:v('rq-proyecto'),fecha:new Date().toISOString().split('T')[0],esfuerzo_horas:v('rq-esfuerzo'),fecha_estimada:v('rq-fecha-est')};
   if(!r.titulo){alert('El título es obligatorio');return;}
   const arr=DB.requerimientos();
+  if(idx>=0){r.ia_generado=arr[idx].ia_generado;}
   if(idx>=0)arr[idx]=r;else arr.push(r);
   DB.saveRequerimientos(arr);closeModal();renderView(currentView);
 }
@@ -753,23 +806,36 @@ DATOS DEL PROYECTO:
 - Área: ${proj.area||'No especificada'}
 - Responsable: ${proj.responsable||'No especificado'}
 - Estado: ${proj.estado||''}
+- Fecha de inicio: ${proj.fecha||new Date().toISOString().split('T')[0]}
 
 RELEVAMIENTOS (${relevs.length}):
 ${relevs.map((r,i)=>`${i+1}. Problema: ${r.problema}. Flujo actual: ${r.flujo_actual||'N/A'}. Impacto: ${r.impacto||'N/A'}. Usuarios: ${r.usuarios||'N/A'}. Reglas: ${r.reglas||'N/A'}`).join('\n')||'No hay relevamientos registrados.'}
 
 REQUERIMIENTOS FUNCIONALES (${reqs.length}):
-${reqs.map((r,i)=>`RF-${i+1}: ${r.titulo}. ${r.descripcion||''}. Criterios: ${r.criterios||'N/A'}. Prioridad: ${r.prioridad}`).join('\n')||'No hay requerimientos registrados.'}
+${reqs.map((r,i)=>`RF-${i+1}: ${r.titulo}. ${r.descripcion||''}. Criterios: ${r.criterios||'N/A'}. Prioridad: ${r.prioridad}. Esfuerzo estimado: ${r.esfuerzo_horas?r.esfuerzo_horas+' horas':'No definido'}. Fecha estimada: ${r.fecha_estimada||'No definida'}`).join('\n')||'No hay requerimientos registrados.'}
 
-Genera la ERS completa. Responde SOLO con este JSON, sin texto adicional ni backticks:
+Genera la ERS completa con cronograma. Responde SOLO con este JSON, sin texto adicional ni backticks:
 {
   "objetivo": "Objetivo del sistema en 1-2 oraciones",
   "alcance": "Descripción del alcance del sistema",
   "stakeholders": ["Lista de stakeholders identificados"],
-  "reqs_funcionales": [{"id":"RF-01","titulo":"titulo","descripcion":"descripcion completa","prioridad":"Alta|Media|Baja","criterios":"criterios de aceptación"}],
+  "reqs_funcionales": [{"id":"RF-01","titulo":"titulo","descripcion":"descripcion completa","prioridad":"Alta|Media|Baja","criterios":"criterios de aceptación","esfuerzo_horas":8}],
   "reqs_no_funcionales": [{"categoria":"Seguridad|Desempeño|Usabilidad|Confiabilidad|Escalabilidad","descripcion":"descripcion"}],
   "reglas_negocio": ["Regla de negocio 1", "Regla 2"],
   "restricciones": ["Restricción técnica o de negocio"],
-  "supuestos": ["Supuesto 1"]
+  "supuestos": ["Supuesto 1"],
+  "cronograma": {
+    "total_horas": 0,
+    "fecha_inicio": "YYYY-MM-DD",
+    "fecha_entrega_estimada": "YYYY-MM-DD",
+    "fases": [
+      {"fase": "Análisis", "duracion_dias": 5, "fecha_inicio": "YYYY-MM-DD", "fecha_fin": "YYYY-MM-DD"},
+      {"fase": "Desarrollo", "duracion_dias": 20, "fecha_inicio": "YYYY-MM-DD", "fecha_fin": "YYYY-MM-DD"},
+      {"fase": "QA", "duracion_dias": 5, "fecha_inicio": "YYYY-MM-DD", "fecha_fin": "YYYY-MM-DD"},
+      {"fase": "UAT", "duracion_dias": 5, "fecha_inicio": "YYYY-MM-DD", "fecha_fin": "YYYY-MM-DD"},
+      {"fase": "Producción", "duracion_dias": 2, "fecha_inicio": "YYYY-MM-DD", "fecha_fin": "YYYY-MM-DD"}
+    ]
+  }
 }`;
 
   try{
@@ -792,7 +858,7 @@ Genera la ERS completa. Responde SOLO con este JSON, sin texto adicional ni back
       return;
     }
     const ersArr=DB.ers();
-    const newErs={proyecto,objetivo:parsed.objetivo,alcance:parsed.alcance,stakeholders:parsed.stakeholders||[],reqs_funcionales:parsed.reqs_funcionales||[],reqs_no_funcionales:parsed.reqs_no_funcionales||[],reglas_negocio:parsed.reglas_negocio||[],restricciones:parsed.restricciones||[],supuestos:parsed.supuestos||[],total_reqs:(parsed.reqs_funcionales||[]).length,fecha:new Date().toISOString().split('T')[0]};
+    const newErs={proyecto,objetivo:parsed.objetivo,alcance:parsed.alcance,stakeholders:parsed.stakeholders||[],reqs_funcionales:parsed.reqs_funcionales||[],reqs_no_funcionales:parsed.reqs_no_funcionales||[],reglas_negocio:parsed.reglas_negocio||[],restricciones:parsed.restricciones||[],supuestos:parsed.supuestos||[],cronograma:parsed.cronograma||null,total_reqs:(parsed.reqs_funcionales||[]).length,fecha:new Date().toISOString().split('T')[0]};
     ersArr.push(newErs);
     DB.saveErs(ersArr);
     renderView('especificacion');
@@ -801,6 +867,34 @@ Genera la ERS completa. Responde SOLO con este JSON, sin texto adicional ni back
 
 function viewErs(i){
   const e=DB.ers()[i];
+  const fmtFecha=f=>f?new Date(f+'T00:00:00').toLocaleDateString('es',{day:'2-digit',month:'short',year:'numeric'}):'—';
+  const cronHtml=e.cronograma?`<div class="ers-section"><h4>Cronograma estimado</h4>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+      <div style="background:var(--color-background-secondary);border-radius:6px;padding:10px 12px">
+        <div style="font-size:10px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;margin-bottom:3px">Total horas</div>
+        <div style="font-size:18px;font-weight:500">${e.cronograma.total_horas||'—'}</div>
+      </div>
+      <div style="background:var(--color-background-secondary);border-radius:6px;padding:10px 12px">
+        <div style="font-size:10px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;margin-bottom:3px">Entrega estimada</div>
+        <div style="font-size:15px;font-weight:500">${fmtFecha(e.cronograma.fecha_entrega_estimada)}</div>
+      </div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr>
+        <th style="text-align:left;padding:6px 8px;background:var(--color-background-secondary);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-tertiary)">Fase</th>
+        <th style="text-align:left;padding:6px 8px;background:var(--color-background-secondary);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-tertiary)">Inicio</th>
+        <th style="text-align:left;padding:6px 8px;background:var(--color-background-secondary);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-tertiary)">Fin</th>
+        <th style="text-align:right;padding:6px 8px;background:var(--color-background-secondary);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-tertiary)">Días</th>
+      </tr></thead>
+      <tbody>${(e.cronograma.fases||[]).map(f=>`<tr>
+        <td style="padding:7px 8px;border-bottom:0.5px solid var(--color-border-tertiary);font-weight:500">${escH(f.fase)}</td>
+        <td style="padding:7px 8px;border-bottom:0.5px solid var(--color-border-tertiary);color:var(--color-text-secondary)">${fmtFecha(f.fecha_inicio)}</td>
+        <td style="padding:7px 8px;border-bottom:0.5px solid var(--color-border-tertiary);color:var(--color-text-secondary)">${fmtFecha(f.fecha_fin)}</td>
+        <td style="padding:7px 8px;border-bottom:0.5px solid var(--color-border-tertiary);text-align:right">${f.duracion_dias} días</td>
+      </tr>`).join('')}</tbody>
+    </table>
+  </div>`:'';
+
   const html=`<h3>ERS-${String(i+1).padStart(3,'0')} — ${escH(e.proyecto)}</h3>
     <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn sm" onclick="closeModal();exportErsPDF(${i})"><i class="ti ti-file-export"></i> Exportar PDF</button>
@@ -809,9 +903,10 @@ function viewErs(i){
     <div class="ers-section"><h4>Objetivo del sistema</h4><p>${escH(e.objetivo)}</p></div>
     <div class="ers-section"><h4>Alcance</h4><p>${escH(e.alcance)}</p></div>
     ${e.stakeholders?.length?`<div class="ers-section"><h4>Stakeholders</h4><ul>${e.stakeholders.map(s=>`<li>${escH(s)}</li>`).join('')}</ul></div>`:''}
+    ${cronHtml}
     <div class="ers-section"><h4>Requerimientos funcionales</h4>
       ${e.reqs_funcionales?.map(r=>`<div class="ers-req-item">
-        <div class="ers-req-id">${r.id} · <span class="badge ${PRIO_KEY[PRIO.indexOf(r.prioridad)]||'medium'}">${r.prioridad}</span></div>
+        <div class="ers-req-id">${r.id} · <span class="badge ${PRIO_KEY[PRIO.indexOf(r.prioridad)]||'medium'}">${r.prioridad}</span>${r.esfuerzo_horas?` · <span style="font-size:11px;color:var(--color-text-tertiary)"><i class="ti ti-clock" style="font-size:10px"></i> ${r.esfuerzo_horas}h</span>`:''}</div>
         <div class="ers-req-title">${escH(r.titulo)}</div>
         <div class="ers-req-desc">${escH(r.descripcion)}</div>
         ${r.criterios?`<div style="font-size:11px;color:var(--color-text-tertiary);margin-top:4px"><b>Criterios:</b> ${escH(r.criterios)}</div>`:''}
@@ -834,6 +929,32 @@ function deleteErs(i){if(confirm('¿Eliminar esta ERS?')){const a=DB.ers();a.spl
 function exportErsPDF(i){
   const e=DB.ers()[i];
   const id=`ERS-${String(i+1).padStart(3,'0')}`;
+  const fmtFecha=f=>f?new Date(f+'T00:00:00').toLocaleDateString('es',{day:'2-digit',month:'short',year:'numeric'}):'—';
+  const cronPDF=e.cronograma?`
+  <h3>Cronograma estimado</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px">
+    <tr style="background:#f5f5f4">
+      <td style="padding:6px 10px;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#888">Total de horas</td>
+      <td style="padding:6px 10px;font-size:15px;font-weight:600">${e.cronograma.total_horas||'—'} horas</td>
+      <td style="padding:6px 10px;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#888">Entrega estimada</td>
+      <td style="padding:6px 10px;font-size:13px;font-weight:600">${fmtFecha(e.cronograma.fecha_entrega_estimada)}</td>
+    </tr>
+  </table>
+  <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead><tr style="background:#f5f5f4">
+      <th style="text-align:left;padding:7px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888;border-bottom:1px solid #ddd">Fase</th>
+      <th style="text-align:left;padding:7px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888;border-bottom:1px solid #ddd">Fecha inicio</th>
+      <th style="text-align:left;padding:7px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888;border-bottom:1px solid #ddd">Fecha fin</th>
+      <th style="text-align:right;padding:7px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888;border-bottom:1px solid #ddd">Duración</th>
+    </tr></thead>
+    <tbody>${(e.cronograma.fases||[]).map(f=>`<tr>
+      <td style="padding:7px 10px;border-bottom:0.5px solid #eee;font-weight:600">${escH(f.fase)}</td>
+      <td style="padding:7px 10px;border-bottom:0.5px solid #eee;color:#555">${fmtFecha(f.fecha_inicio)}</td>
+      <td style="padding:7px 10px;border-bottom:0.5px solid #eee;color:#555">${fmtFecha(f.fecha_fin)}</td>
+      <td style="padding:7px 10px;border-bottom:0.5px solid #eee;text-align:right">${f.duracion_dias} días</td>
+    </tr>`).join('')}</tbody>
+  </table>`:'';
+
   const win=window.open('','_blank');
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${id}</title>
   <style>body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;color:#1a1a18;font-size:13px;line-height:1.6}
@@ -853,9 +974,10 @@ function exportErsPDF(i){
   <h3>Objetivo del sistema</h3><p>${escH(e.objetivo)}</p>
   <h3>Alcance</h3><p>${escH(e.alcance)}</p>
   ${e.stakeholders?.length?`<h3>Stakeholders</h3><ul>${e.stakeholders.map(s=>`<li>${escH(s)}</li>`).join('')}</ul>`:''}
+  ${cronPDF}
   <h3>Requerimientos funcionales</h3>
   ${e.reqs_funcionales?.map(r=>`<div class="req-item">
-    <div class="req-id">${r.id} &nbsp;<span class="badge ${PRIO_KEY[PRIO.indexOf(r.prioridad)]||'medium'}">${r.prioridad}</span></div>
+    <div class="req-id">${r.id} &nbsp;<span class="badge ${PRIO_KEY[PRIO.indexOf(r.prioridad)]||'medium'}">${r.prioridad}</span>${r.esfuerzo_horas?` &nbsp;<span style="font-size:10px;color:#888">⏱ ${r.esfuerzo_horas}h</span>`:''}</div>
     <div class="req-title">${escH(r.titulo)}</div>
     <div class="req-desc">${escH(r.descripcion)}</div>
     ${r.criterios?`<div style="font-size:11px;margin-top:4px;color:#777"><b>Criterios:</b> ${escH(r.criterios)}</div>`:''}
