@@ -1107,12 +1107,12 @@ function editarCronograma(ersIdx){
     <p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:14px;line-height:1.6">Modifica los campos necesarios. Cada cambio requiere un motivo registrado.</p>
     <div class="form-row" style="margin-bottom:4px">
       <div class="field">
-        <label>Total de horas</label>
-        <input type="number" id="cron-total-horas" value="${e.cronograma.total_horas||0}" min="0" onchange="mostrarMotivoInline('motivo-total-horas',this.value!=='${e.cronograma.total_horas||0}')">
+        <label>Total de horas <span style="font-size:10px;color:var(--color-text-tertiary);font-weight:400">(se recalcula al cambiar días)</span></label>
+        <input type="number" id="cron-total-horas" value="${e.cronograma.total_horas||0}" min="0" style="background:var(--color-background-secondary)" readonly>
         <div id="motivo-total-horas" style="display:none;margin-top:6px"><textarea placeholder="Motivo del cambio en total de horas..." style="min-height:50px;font-size:12px" id="motivo-txt-total-horas"></textarea></div>
       </div>
       <div class="field">
-        <label>Fecha de entrega estimada</label>
+        <label>Fecha de entrega estimada <span style="font-size:10px;color:var(--color-text-tertiary);font-weight:400">(fin de última fase)</span></label>
         <input type="date" id="cron-fecha-entrega" value="${e.cronograma.fecha_entrega_estimada||''}" onchange="mostrarMotivoInline('motivo-fecha-entrega',this.value!=='${e.cronograma.fecha_entrega_estimada||''}')">
         <div id="motivo-fecha-entrega" style="display:none;margin-top:6px"><textarea placeholder="Motivo del cambio en fecha de entrega..." style="min-height:50px;font-size:12px" id="motivo-txt-fecha-entrega"></textarea></div>
       </div>
@@ -1128,12 +1128,12 @@ function editarCronograma(ersIdx){
         </div>
         <div class="field">
           <label>Fecha fin</label>
-          <input type="date" id="cron-ff-${fi}" value="${f.fecha_fin||''}" onchange="mostrarMotivoInline('motivo-ff-${fi}',this.value!=='${f.fecha_fin||''}')">
+          <input type="date" id="cron-ff-${fi}" value="${f.fecha_fin||''}" onchange="recalcularTotales(${fases.length});mostrarMotivoInline('motivo-ff-${fi}',this.value!=='${f.fecha_fin||''}')">
           <div id="motivo-ff-${fi}" style="display:none;margin-top:6px"><textarea placeholder="Motivo del cambio..." style="min-height:50px;font-size:12px" id="motivo-txt-ff-${fi}"></textarea></div>
         </div>
         <div class="field" style="max-width:90px">
           <label>Días</label>
-          <input type="number" id="cron-fd-${fi}" value="${f.duracion_dias||0}" min="0" onchange="mostrarMotivoInline('motivo-fd-${fi}',this.value!=='${f.duracion_dias||0}')">
+          <input type="number" id="cron-fd-${fi}" value="${f.duracion_dias||0}" min="0" onchange="recalcularTotales(${fases.length});mostrarMotivoInline('motivo-fd-${fi}',this.value!=='${f.duracion_dias||0}')">
           <div id="motivo-fd-${fi}" style="display:none;margin-top:6px"><textarea placeholder="Motivo..." style="min-height:50px;font-size:12px" id="motivo-txt-fd-${fi}"></textarea></div>
         </div>
       </div>
@@ -1142,6 +1142,21 @@ function editarCronograma(ersIdx){
       <button class="btn" onclick="closeModal();viewErs(${ersIdx})">Cancelar</button>
       <button class="btn primary" onclick="guardarCronograma(${ersIdx})"><i class="ti ti-check"></i> Guardar cambios</button>
     </div>`);
+}
+
+function recalcularTotales(numFases){
+  let totalDias=0;
+  for(let fi=0;fi<numFases;fi++){
+    const dias=parseInt(document.getElementById(`cron-fd-${fi}`)?.value)||0;
+    totalDias+=dias;
+  }
+  const totalHoras=totalDias*8;
+  const campoHoras=document.getElementById('cron-total-horas');
+  if(campoHoras)campoHoras.value=totalHoras;
+  // Actualizar fecha entrega con el fin de la última fase
+  const ultimaFechaFin=document.getElementById(`cron-ff-${numFases-1}`)?.value||'';
+  const campoEntrega=document.getElementById('cron-fecha-entrega');
+  if(campoEntrega&&ultimaFechaFin)campoEntrega.value=ultimaFechaFin;
 }
 
 function mostrarMotivoInline(containerId, show){
@@ -1159,15 +1174,13 @@ function guardarCronograma(ersIdx){
   const totalHorasNuevo=parseInt(document.getElementById('cron-total-horas')?.value)||0;
   const fechaEntregaNueva=document.getElementById('cron-fecha-entrega')?.value||'';
 
+  // Total horas y fecha entrega se recalculan automáticamente — se registran si cambiaron
   if(totalHorasNuevo!==e.cronograma.total_horas){
-    const m=getMotivoTxt('motivo-txt-total-horas');
-    if(!m){alert('Ingresa el motivo del cambio en "Total de horas".');return;}
-    cambios.push({campo:'Total de horas',valor_anterior:String(e.cronograma.total_horas||'—'),valor_nuevo:String(totalHorasNuevo),motivo:m});
+    cambios.push({campo:'Total de horas (recalculado)',valor_anterior:String(e.cronograma.total_horas||'—'),valor_nuevo:String(totalHorasNuevo),motivo:'Recalculado automáticamente por cambio en días de fases'});
   }
   if(fechaEntregaNueva!==e.cronograma.fecha_entrega_estimada){
-    const m=getMotivoTxt('motivo-txt-fecha-entrega');
-    if(!m){alert('Ingresa el motivo del cambio en "Fecha de entrega".');return;}
-    cambios.push({campo:'Fecha de entrega',valor_anterior:e.cronograma.fecha_entrega_estimada||'—',valor_nuevo:fechaEntregaNueva,motivo:m});
+    const mFecha=getMotivoTxt('motivo-txt-fecha-entrega');
+    cambios.push({campo:'Fecha de entrega',valor_anterior:e.cronograma.fecha_entrega_estimada||'—',valor_nuevo:fechaEntregaNueva,motivo:mFecha||'Actualizada por cambio en fecha fin de última fase'});
   }
 
   const fasesNuevas=fases.map((f,fi)=>{
