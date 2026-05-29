@@ -639,22 +639,22 @@ RELEVAMIENTO:
 Genera entre 3 y 6 requerimientos funcionales. Responde SOLO con este JSON, sin texto adicional ni backticks:
 {"requerimientos":[{"titulo":"Título corto","descripcion":"Qué debe hacer el sistema (el QUÉ, no el CÓMO)","prioridad":"Alta|Media|Baja","criterios":"Criterios de aceptación verificables"}]}`;
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':getApiKey(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:1024,messages:[{role:'user',content:prompt}]})});
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${getApiKey()}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})});
     const data=await res.json();
     if(data.error){
-      document.getElementById('ai-stream').textContent='Error de la API de Claude:\n\n'+data.error.message+'\n\nVerifica tu API key en Datos → Configurar API key.';
+      document.getElementById('ai-stream').textContent='Error de la API de Gemini:\n\n'+data.error.message+'\n\nVerifica tu API key en Datos → Configurar API key.';
       return;
     }
-    const text=data.content?.[0]?.text||'';
+    const text=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
     if(!text){
-      document.getElementById('ai-stream').textContent='Claude no devolvió contenido.\n\nRespuesta completa:\n'+JSON.stringify(data,null,2);
+      document.getElementById('ai-stream').textContent='Gemini no devolvió contenido.\n\nRespuesta completa:\n'+JSON.stringify(data,null,2);
       return;
     }
     let parsed;
     try{
       parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
     }catch(parseErr){
-      document.getElementById('ai-stream').textContent='Error al interpretar la respuesta de Claude.\n\nRespuesta recibida:\n'+text;
+      document.getElementById('ai-stream').textContent='Error al interpretar la respuesta de Gemini.\n\nRespuesta recibida:\n'+text;
       return;
     }
     const reqs=DB.requerimientos();let added=0;
@@ -737,22 +737,22 @@ Genera la ERS completa. Responde SOLO con este JSON, sin texto adicional ni back
 }`;
 
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':getApiKey(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:2048,messages:[{role:'user',content:prompt}]})});
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${getApiKey()}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})});
     const data=await res.json();
     if(data.error){
-      document.getElementById('ai-stream').textContent='Error de la API de Claude:\n\n'+data.error.message+'\n\nVerifica tu API key en Datos → Configurar API key.';
+      document.getElementById('ai-stream').textContent='Error de la API de Gemini:\n\n'+data.error.message+'\n\nVerifica tu API key en Datos → Configurar API key.';
       return;
     }
-    const text=data.content?.[0]?.text||'';
+    const text=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
     if(!text){
-      document.getElementById('ai-stream').textContent='Claude no devolvió contenido.\n\nRespuesta completa:\n'+JSON.stringify(data,null,2);
+      document.getElementById('ai-stream').textContent='Gemini no devolvió contenido.\n\nRespuesta completa:\n'+JSON.stringify(data,null,2);
       return;
     }
     let parsed;
     try{
       parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
     }catch(parseErr){
-      document.getElementById('ai-stream').textContent='Error al interpretar la respuesta de Claude.\n\nRespuesta recibida:\n'+text;
+      document.getElementById('ai-stream').textContent='Error al interpretar la respuesta de Gemini.\n\nRespuesta recibida:\n'+text;
       return;
     }
     const ersArr=DB.ers();
@@ -927,14 +927,14 @@ function getApiKey(){
 
 function configurarApiKey(){
   const current=getApiKey();
-  showModal(`<h3>Configurar API key de Claude</h3>
+  showModal(`<h3>Configurar API key de Gemini</h3>
     <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:16px;line-height:1.6">
       La key se guarda solo en tu navegador, nunca en el código ni en GitHub.<br>
-      Obtén tu key en <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--color-text-info)">console.anthropic.com</a> → API Keys.
+      Obtén tu key gratis en <a href="https://aistudio.google.com" target="_blank" style="color:var(--color-text-info)">aistudio.google.com</a> → API Keys.
     </p>
     <div class="field">
-      <label>API Key de Anthropic</label>
-      <input id="gemini-key" type="password" value="${current}" placeholder="sk-ant-...">
+      <label>API Key de Gemini</label>
+      <input id="gemini-key" type="password" value="${current}" placeholder="AIza...">
     </div>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
       ${current?`<button class="btn danger" onclick="localStorage.removeItem('reqmgr_gemini_key');closeModal();alert('Key eliminada.')">Eliminar key</button>`:''}
@@ -955,12 +955,12 @@ function checkApiKey(){
   if(!getApiKey()){
     showModal(`<h3>API key requerida</h3>
       <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:16px;line-height:1.6">
-        Para usar la IA necesitas configurar tu API key de Anthropic.<br>
-        Ve a <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--color-text-info)">console.anthropic.com</a> → API Keys → Create Key.
+        Para usar la IA necesitas configurar tu API key de Gemini (gratis).<br>
+        Ve a <a href="https://aistudio.google.com" target="_blank" style="color:var(--color-text-info)">aistudio.google.com</a> → API Keys → Create API key.
       </p>
       <div class="field">
-        <label>API Key de Anthropic</label>
-        <input id="gemini-key" type="password" placeholder="sk-ant-...">
+        <label>API Key de Gemini</label>
+        <input id="gemini-key" type="password" placeholder="AIza...">
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
         <button class="btn" onclick="closeModal()">Cancelar</button>
