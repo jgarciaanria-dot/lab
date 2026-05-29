@@ -211,6 +211,8 @@ const DB={
   saveRequerimientos(d){this.set('requerimientos',d);flashSave()},
   archivados(){return this.get('archivados')||[]},
   saveArchivados(d){this.set('archivados',d);flashSave()},
+  solicitudes(){return this.get('solicitudes')||[]},
+  saveSolicitudes(d){this.set('solicitudes',d);flashSave()},
   ers(){return this.get('ers')||[]},
   saveErs(d){this.set('ers',d);flashSave()}
 };
@@ -258,6 +260,7 @@ function navigate(view){
   const acts=document.getElementById('topbar-actions');
   acts.innerHTML='';
   if(view==='projects'){const b=mkBtn('primary','<i class="ti ti-plus"></i> Nuevo proyecto',()=>openProjectModal());acts.appendChild(b);}
+  if(view==='solicitudes'){const b=mkBtn('primary','<i class="ti ti-plus"></i> Nueva solicitud',()=>openSolicitudModal());acts.appendChild(b);}
   if(view==='relevamientos'){const b=mkBtn('primary','<i class="ti ti-plus"></i> Nuevo relevamiento',()=>openRelevamientoModal());acts.appendChild(b);}
   if(view==='requerimientos'){
     const b1=mkBtn('','<i class="ti ti-file-export"></i> Exportar PDF',()=>exportReqsPDF());acts.appendChild(b1);
@@ -277,7 +280,7 @@ function mkBtn(cls,html,fn){
 
 function renderView(v){
   const c=document.getElementById('content');
-  const map={dashboard:renderDashboard,projects:renderProjects,relevamientos:renderRelevamientos,requerimientos:renderRequerimientos,archivados:renderArchivados,especificacion:renderEspecificacion,seguimiento:renderSeguimiento,evidencias:renderEvidencias,solicitudes:()=>renderProximamente('solicitudes','Solicitudes','ti-send','Captura y gestión de solicitudes de desarrollo antes del relevamiento funcional.'),historias:()=>renderProximamente('historias','Historias de usuario','ti-subtask','Generación de historias de usuario en formato Como/Quiero/Para con exportación a Jira y Azure DevOps.'),qa:()=>renderProximamente('qa','Control de calidad (QA)','ti-bug','Casos de prueba, ejecuciones y registro de defectos por requerimiento.'),uat:()=>renderProximamente('uat','Pruebas de aceptación (UAT)','ti-user-check','Gestión de pruebas de aceptación con evidencias y aprobación formal.'),reportes:()=>renderProximamente('reportes','Reportes','ti-chart-bar','Reportes de avance, métricas de calidad y dashboards ejecutivos por proyecto.')};
+  const map={dashboard:renderDashboard,projects:renderProjects,relevamientos:renderRelevamientos,requerimientos:renderRequerimientos,archivados:renderArchivados,especificacion:renderEspecificacion,seguimiento:renderSeguimiento,evidencias:renderEvidencias,solicitudes:renderSolicitudes,historias:()=>renderProximamente('historias','Historias de usuario','ti-subtask','Generación de historias de usuario en formato Como/Quiero/Para con exportación a Jira y Azure DevOps.'),qa:()=>renderProximamente('qa','Control de calidad (QA)','ti-bug','Casos de prueba, ejecuciones y registro de defectos por requerimiento.'),uat:()=>renderProximamente('uat','Pruebas de aceptación (UAT)','ti-user-check','Gestión de pruebas de aceptación con evidencias y aprobación formal.'),reportes:()=>renderProximamente('reportes','Reportes','ti-chart-bar','Reportes de avance, métricas de calidad y dashboards ejecutivos por proyecto.')};
   c.innerHTML=(map[v]||renderDashboard)();
 }
 
@@ -1513,6 +1516,232 @@ function renderSeguimiento(){
   }).join('')}</div>`;
 }
 
+/* ── SOLICITUDES ── */
+const SOL_ESTADOS=['Nueva','En evaluación','Aprobada','Rechazada','En relevamiento'];
+const SOL_EST_KEY=['pending','analysis','prod','high','dev'];
+const SOL_URGENCIA=['Alta','Media','Baja'];
+const SOL_IMPACTO=['Alto','Medio','Bajo'];
+
+function renderSolicitudes(){
+  const sols=DB.solicitudes();
+  if(!sols.length)return `<div class="empty-state"><i class="ti ti-send"></i><p>No hay solicitudes registradas.<br>Crea la primera con el botón de arriba.</p></div>`;
+
+  const grupos={};
+  sols.forEach((s,i)=>{
+    const key=s.proyecto||'__sin_proyecto__';
+    if(!grupos[key])grupos[key]=[];
+    grupos[key].push({...s,_idx:i});
+  });
+
+  return Object.entries(grupos).map(([proj,items])=>{
+    const label=proj==='__sin_proyecto__'?'Sin proyecto':proj;
+    const groupId='solgrp-'+proj.replace(/[^a-zA-Z0-9]/g,'_');
+    const itemsHtml=items.map(s=>`<div class="req-item" style="display:flex;align-items:flex-start;gap:10px;margin-bottom:6px;border-radius:6px" onclick="viewSolicitud(${s._idx})">
+      <div style="flex:1;min-width:0">
+        <div class="req-id">SOL-${String(s._idx+1).padStart(3,'0')} · ${s.fecha||''}</div>
+        <div class="req-title">${escH(s.titulo)}</div>
+        <div class="req-meta">
+          <span class="badge ${SOL_EST_KEY[SOL_ESTADOS.indexOf(s.estado)]||'pending'}">${s.estado}</span>
+          <span class="badge ${PRIO_KEY[SOL_URGENCIA.indexOf(s.urgencia)]||'medium'}">Urgencia: ${s.urgencia}</span>
+          <span class="badge ${s.impacto==='Alto'?'high':s.impacto==='Medio'?'medium':'low'}">Impacto: ${s.impacto}</span>
+          ${s.ia_evaluado?`<span style="font-size:11px;color:var(--color-text-tertiary)"><i class="ti ti-sparkles" style="font-size:11px"></i> IA</span>`:''}
+        </div>
+      </div>
+    </div>`).join('');
+
+    return `<div class="req-group" style="margin-bottom:10px">
+      <div onclick="toggleGroup('${groupId}')" style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:8px;cursor:pointer;user-select:none;transition:background .12s" onmouseover="this.style.background='var(--color-background-secondary)'" onmouseout="this.style.background='var(--color-background-primary)'">
+        <i id="${groupId}-icon" class="ti ti-folder" style="font-size:16px;color:var(--color-text-info)"></i>
+        <span style="font-size:13px;font-weight:500;flex:1">${escH(label)}</span>
+        <span class="badge analysis" style="font-size:11px">${items.length} sol${items.length!==1?'s':''}</span>
+        <i id="${groupId}-chevron" class="ti ti-chevron-right" style="font-size:14px;color:var(--color-text-tertiary);transition:transform .2s"></i>
+      </div>
+      <div id="${groupId}" style="display:none;padding:8px 0 0 12px">${itemsHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+function openSolicitudModal(sol,idx){
+  const isEdit=sol!==undefined;
+  const s=sol||{titulo:'',proyecto:'',area:AREAS[0],solicitante:'',descripcion:'',impacto:'Alto',urgencia:'Alta',estado:'Nueva',fecha:new Date().toISOString().split('T')[0],notas_evaluacion:''};
+  const projs=DB.projects();
+  showModal(`<h3>${isEdit?'Editar':'Nueva'} solicitud</h3>
+    <div class="form-row">
+      <div class="field"><label>Título *</label><input id="sol-titulo" value="${escH(s.titulo)}" placeholder="Ej: Automatizar registro de llegada de buques"></div>
+      <div class="field"><label>Proyecto asociado</label><select id="sol-proyecto"><option value="">Sin proyecto</option>${projs.map(p=>`<option${p.nombre===s.proyecto?' selected':''}>${escH(p.nombre)}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>Área solicitante</label><select id="sol-area">${AREAS.map(a=>`<option${a===s.area?' selected':''}>${a}</option>`).join('')}</select></div>
+      <div class="field"><label>Solicitante</label><input id="sol-solicitante" value="${escH(s.solicitante)}" placeholder="Nombre del solicitante"></div>
+    </div>
+    <div class="field"><label>Descripción del problema o necesidad *</label><textarea id="sol-desc" style="min-height:80px">${escH(s.descripcion)}</textarea></div>
+    <div class="form-row">
+      <div class="field"><label>Impacto en el negocio</label><select id="sol-impacto">${SOL_IMPACTO.map(i=>`<option${i===s.impacto?' selected':''}>${i}</option>`).join('')}</select></div>
+      <div class="field"><label>Urgencia</label><select id="sol-urgencia">${SOL_URGENCIA.map(u=>`<option${u===s.urgencia?' selected':''}>${u}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>Estado</label><select id="sol-estado">${SOL_ESTADOS.map(e=>`<option${e===s.estado?' selected':''}>${e}</option>`).join('')}</select></div>
+      <div class="field"><label>Fecha</label><input type="date" id="sol-fecha" value="${s.fecha}"></div>
+    </div>
+    <div class="field"><label>Notas de evaluación</label><textarea id="sol-notas" style="min-height:60px" placeholder="Observaciones, criterios de aprobación/rechazo...">${escH(s.notas_evaluacion||'')}</textarea></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap">
+      ${isEdit?`<button class="btn danger" onclick="deleteSolicitud(${idx})"><i class="ti ti-trash"></i></button>`:''}
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn" onclick="evaluarSolicitudIA(${isEdit?idx:-1})" style="color:var(--color-text-info);border-color:rgba(24,95,165,0.3)"><i class="ti ti-sparkles"></i> Evaluar con IA</button>
+      <button class="btn primary" onclick="saveSolicitud(${isEdit?idx:-1})"><i class="ti ti-check"></i> Guardar</button>
+    </div>`);
+}
+
+function saveSolicitud(idx){
+  const s={titulo:v('sol-titulo'),proyecto:v('sol-proyecto'),area:v('sol-area'),solicitante:v('sol-solicitante'),descripcion:v('sol-desc'),impacto:v('sol-impacto'),urgencia:v('sol-urgencia'),estado:v('sol-estado'),fecha:v('sol-fecha'),notas_evaluacion:v('sol-notas')};
+  if(!s.titulo||!s.descripcion){alert('El título y la descripción son obligatorios.');return;}
+  const arr=DB.solicitudes();
+  if(idx>=0){s.ia_evaluado=arr[idx].ia_evaluado;s.evaluacion_ia=arr[idx].evaluacion_ia;}
+  if(idx>=0)arr[idx]=s;else arr.push(s);
+  DB.saveSolicitudes(arr);closeModal();renderView(currentView);
+}
+
+function deleteSolicitud(i){
+  if(confirm('¿Eliminar esta solicitud?')){
+    const a=DB.solicitudes();a.splice(i,1);DB.saveSolicitudes(a);closeModal();renderView(currentView);
+  }
+}
+
+function viewSolicitud(i){
+  const s=DB.solicitudes()[i];
+  const evalHtml=s.evaluacion_ia?`<div class="ai-box" style="margin-top:12px">
+    <div class="ai-header"><i class="ti ti-sparkles"></i> Evaluación de IA</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
+      <div style="background:var(--color-background-primary);border-radius:6px;padding:8px 10px;text-align:center">
+        <div style="font-size:10px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;margin-bottom:3px">Complejidad</div>
+        <div style="font-size:14px;font-weight:500">${escH(s.evaluacion_ia.complejidad||'—')}</div>
+      </div>
+      <div style="background:var(--color-background-primary);border-radius:6px;padding:8px 10px;text-align:center">
+        <div style="font-size:10px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;margin-bottom:3px">Riesgo</div>
+        <div style="font-size:14px;font-weight:500">${escH(s.evaluacion_ia.riesgo||'—')}</div>
+      </div>
+      <div style="background:var(--color-background-primary);border-radius:6px;padding:8px 10px;text-align:center">
+        <div style="font-size:10px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;margin-bottom:3px">Esfuerzo est.</div>
+        <div style="font-size:14px;font-weight:500">${escH(s.evaluacion_ia.esfuerzo_estimado||'—')}</div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.6;margin-bottom:8px">${escH(s.evaluacion_ia.resumen||'')}</div>
+    ${s.evaluacion_ia.recomendacion?`<div style="font-size:12px;padding:8px 10px;border-radius:6px;background:var(--color-background-primary);border-left:2px solid var(--color-text-info)"><b>Recomendación:</b> ${escH(s.evaluacion_ia.recomendacion)}</div>`:''}
+  </div>`:'';
+
+  showModal(`<h3>SOL-${String(i+1).padStart(3,'0')} — ${escH(s.titulo)}</h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+      <span class="badge ${SOL_EST_KEY[SOL_ESTADOS.indexOf(s.estado)]||'pending'}">${s.estado}</span>
+      <span class="badge ${PRIO_KEY[SOL_URGENCIA.indexOf(s.urgencia)]||'medium'}">Urgencia: ${s.urgencia}</span>
+      <span class="badge ${s.impacto==='Alto'?'high':s.impacto==='Medio'?'medium':'low'}">Impacto: ${s.impacto}</span>
+    </div>
+    <div class="detail-row"><div class="detail-label">Proyecto</div><div class="detail-value">${escH(s.proyecto||'Sin proyecto')}</div></div>
+    <div class="detail-row"><div class="detail-label">Área / Solicitante</div><div class="detail-value">${escH(s.area)} · ${escH(s.solicitante||'—')}</div></div>
+    <div class="detail-row"><div class="detail-label">Descripción</div><div class="detail-value">${escH(s.descripcion)}</div></div>
+    ${s.notas_evaluacion?`<div class="detail-row"><div class="detail-label">Notas de evaluación</div><div class="detail-value">${escH(s.notas_evaluacion)}</div></div>`:''}
+    ${evalHtml}
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;flex-wrap:wrap">
+      <button class="btn" onclick="closeModal()">Cerrar</button>
+      <button class="btn" onclick="closeModal();openSolicitudModal(DB.solicitudes()[${i}],${i})"><i class="ti ti-edit"></i> Editar</button>
+      ${s.estado==='Aprobada'?`<button class="btn primary" onclick="closeModal();crearRelevamientoDesde(${i})"><i class="ti ti-clipboard-list"></i> Crear relevamiento</button>`:''}
+      <button class="btn" onclick="evaluarSolicitudIAView(${i})" style="color:var(--color-text-info);border-color:rgba(24,95,165,0.3)"><i class="ti ti-sparkles"></i> Evaluar con IA</button>
+    </div>`);
+}
+
+async function evaluarSolicitudIA(idx){
+  if(!checkApiKey())return;
+  const titulo=v('sol-titulo');const desc=v('sol-desc');
+  if(!titulo||!desc){alert('Completa el título y la descripción primero.');return;}
+  const btn=document.querySelector('button[onclick*="evaluarSolicitudIA"]');
+  if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-sparkles"></i> Evaluando...';}
+
+  const prompt=`Eres un analista funcional senior. Evalúa la siguiente solicitud de desarrollo de software y responde SOLO con este JSON, sin texto adicional ni backticks:
+{
+  "complejidad": "Baja|Media|Alta",
+  "riesgo": "Bajo|Medio|Alto",
+  "esfuerzo_estimado": "ej: 2-4 semanas",
+  "amerita_relevamiento": true,
+  "resumen": "Resumen ejecutivo de 2-3 oraciones sobre la solicitud",
+  "recomendacion": "Qué hacer: aprobar, rechazar o solicitar más información y por qué",
+  "puntos_clave": ["Punto importante 1", "Punto 2", "Punto 3"]
+}
+
+SOLICITUD:
+Título: ${titulo}
+Área: ${v('sol-area')}
+Descripción: ${desc}
+Impacto declarado: ${v('sol-impacto')}
+Urgencia declarada: ${v('sol-urgencia')}`;
+
+  try{
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${getApiKey()}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})});
+    const data=await res.json();
+    if(data.error){alert('Error de Gemini: '+data.error.message);return;}
+    const text=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
+    const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+    const arr=DB.solicitudes();
+    const realIdx=idx>=0?idx:arr.length;
+    // Guardar primero si es nueva
+    if(idx<0){
+      const s={titulo:v('sol-titulo'),proyecto:v('sol-proyecto'),area:v('sol-area'),solicitante:v('sol-solicitante'),descripcion:v('sol-desc'),impacto:v('sol-impacto'),urgencia:v('sol-urgencia'),estado:v('sol-estado')||'En evaluación',fecha:v('sol-fecha'),notas_evaluacion:v('sol-notas'),ia_evaluado:true,evaluacion_ia:parsed};
+      arr.push(s);
+    } else {
+      arr[idx].ia_evaluado=true;arr[idx].evaluacion_ia=parsed;
+      if(arr[idx].estado==='Nueva')arr[idx].estado='En evaluación';
+    }
+    DB.saveSolicitudes(arr);
+    closeModal();
+    viewSolicitud(realIdx);
+  }catch(e){alert('Error al evaluar: '+e.message);}
+}
+
+async function evaluarSolicitudIAView(i){
+  if(!checkApiKey())return;
+  const s=DB.solicitudes()[i];
+  const prompt=`Eres un analista funcional senior. Evalúa la siguiente solicitud de desarrollo de software y responde SOLO con este JSON, sin texto adicional ni backticks:
+{
+  "complejidad": "Baja|Media|Alta",
+  "riesgo": "Bajo|Medio|Alto",
+  "esfuerzo_estimado": "ej: 2-4 semanas",
+  "amerita_relevamiento": true,
+  "resumen": "Resumen ejecutivo de 2-3 oraciones sobre la solicitud",
+  "recomendacion": "Qué hacer: aprobar, rechazar o solicitar más información y por qué",
+  "puntos_clave": ["Punto importante 1", "Punto 2", "Punto 3"]
+}
+
+SOLICITUD:
+Título: ${s.titulo}
+Área: ${s.area}
+Descripción: ${s.descripcion}
+Impacto declarado: ${s.impacto}
+Urgencia declarada: ${s.urgencia}`;
+
+  try{
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${getApiKey()}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})});
+    const data=await res.json();
+    if(data.error){alert('Error de Gemini: '+data.error.message);return;}
+    const text=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
+    const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+    const arr=DB.solicitudes();
+    arr[i].ia_evaluado=true;arr[i].evaluacion_ia=parsed;
+    if(arr[i].estado==='Nueva')arr[i].estado='En evaluación';
+    DB.saveSolicitudes(arr);
+    closeModal();
+    viewSolicitud(i);
+  }catch(e){alert('Error al evaluar: '+e.message);}
+}
+
+function crearRelevamientoDesde(solIdx){
+  const s=DB.solicitudes()[solIdx];
+  const rel={problema:s.descripcion,flujo_actual:'',impacto:s.impacto==='Alto'?'Alto impacto en el negocio':s.impacto==='Medio'?'Impacto moderado':'Impacto bajo',usuarios:s.area,reglas:'',proyecto:s.proyecto,fecha:new Date().toISOString().split('T')[0]};
+  // Marcar solicitud como en relevamiento
+  const arr=DB.solicitudes();
+  arr[solIdx].estado='En relevamiento';
+  DB.saveSolicitudes(arr);
+  navigate('relevamientos');
+  openRelevamientoModal(rel,-1);
+}
+
 /* ── PRÓXIMAMENTE ── */
 function renderProximamente(id,titulo,icono,descripcion){
   return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;text-align:center;padding:40px">
@@ -1560,6 +1789,7 @@ function exportarDatos(){
     relevamientos:DB.relevamientos(),
     requerimientos:DB.requerimientos(),
     archivados:DB.archivados(),
+    solicitudes:DB.solicitudes(),
     ers:DB.ers()
   };
   const json=JSON.stringify(data,null,2);
@@ -1589,6 +1819,7 @@ function importarDatos(input){
       if(data.relevamientos) DB.saveRelevamientos(data.relevamientos);
       if(data.requerimientos) DB.saveRequerimientos(data.requerimientos);
       if(data.archivados) DB.saveArchivados(data.archivados);
+      if(data.solicitudes) DB.saveSolicitudes(data.solicitudes);
       if(data.ers) DB.saveErs(data.ers);
       input.value='';
       alert('¡Datos importados correctamente!');
