@@ -166,18 +166,25 @@ tr:hover td{background:var(--color-background-secondary)}
       <div class="nav-section">Principal</div>
       <div class="nav-item active" onclick="navigate('dashboard')"><i class="ti ti-layout-dashboard"></i>Dashboard</div>
       <div class="nav-item" onclick="navigate('projects')"><i class="ti ti-folder"></i>Proyectos</div>
-      <div class="nav-section">Trabajo</div>
+      <div class="nav-section">Análisis</div>
+      <div class="nav-item" onclick="navigate('solicitudes')"><i class="ti ti-send"></i>Solicitudes</div>
       <div class="nav-item" onclick="navigate('relevamientos')"><i class="ti ti-clipboard-list"></i>Relevamientos</div>
       <div class="nav-item" onclick="navigate('requerimientos')"><i class="ti ti-list-check"></i>Requerimientos</div>
-      <div class="nav-item" onclick="navigate('archivados')"><i class="ti ti-archive"></i>Archivados</div>
       <div class="nav-item" onclick="navigate('especificacion')"><i class="ti ti-file-description"></i>Especificación (ERS)</div>
       <div class="nav-item" onclick="navigate('seguimiento')"><i class="ti ti-git-branch"></i>Seguimiento</div>
+      <div class="nav-section">Gestión</div>
+      <div class="nav-item" onclick="navigate('historias')"><i class="ti ti-subtask"></i>Historias de usuario</div>
+      <div class="nav-item" onclick="navigate('qa')"><i class="ti ti-bug"></i>QA</div>
+      <div class="nav-item" onclick="navigate('uat')"><i class="ti ti-user-check"></i>UAT</div>
+      <div class="nav-section">Ejecución</div>
+      <div class="nav-item" onclick="navigate('reportes')"><i class="ti ti-chart-bar"></i>Reportes</div>
       <div class="nav-section">Recursos</div>
       <div class="nav-item" onclick="navigate('evidencias')"><i class="ti ti-paperclip"></i>Evidencias</div>
       <div class="nav-section">Datos</div>
       <div class="nav-item" onclick="exportarDatos()"><i class="ti ti-download"></i>Exportar backup</div>
       <div class="nav-item" onclick="document.getElementById('import-file').click()"><i class="ti ti-upload"></i>Importar backup</div>
       <div class="nav-item" onclick="configurarApiKey()"><i class="ti ti-key"></i>Configurar API key</div>
+      <div class="nav-item" onclick="navigate('archivados')"><i class="ti ti-archive"></i>Archivados</div>
     </nav>
   </div>
   <input type="file" id="import-file" accept=".json" style="display:none" onchange="importarDatos(this)">
@@ -246,7 +253,7 @@ function navigate(view){
   document.querySelectorAll('.nav-item').forEach(el=>{
     el.classList.toggle('active',el.getAttribute('onclick')===`navigate('${view}')`);
   });
-  const titles={dashboard:'Dashboard ejecutivo',projects:'Proyectos',relevamientos:'Relevamientos funcionales',requerimientos:'Requerimientos',archivados:'Requerimientos archivados',especificacion:'Especificación (ERS)',seguimiento:'Seguimiento Kanban',evidencias:'Evidencias'};
+  const titles={dashboard:'Dashboard ejecutivo',projects:'Proyectos',relevamientos:'Relevamientos funcionales',requerimientos:'Requerimientos',archivados:'Requerimientos archivados',especificacion:'Especificación (ERS)',seguimiento:'Seguimiento Kanban',evidencias:'Evidencias',solicitudes:'Solicitudes',historias:'Historias de usuario',qa:'Control de calidad (QA)',uat:'Pruebas de aceptación (UAT)',reportes:'Reportes'};
   document.getElementById('topbar-title').textContent=titles[view]||view;
   const acts=document.getElementById('topbar-actions');
   acts.innerHTML='';
@@ -270,7 +277,7 @@ function mkBtn(cls,html,fn){
 
 function renderView(v){
   const c=document.getElementById('content');
-  const map={dashboard:renderDashboard,projects:renderProjects,relevamientos:renderRelevamientos,requerimientos:renderRequerimientos,archivados:renderArchivados,especificacion:renderEspecificacion,seguimiento:renderSeguimiento,evidencias:renderEvidencias};
+  const map={dashboard:renderDashboard,projects:renderProjects,relevamientos:renderRelevamientos,requerimientos:renderRequerimientos,archivados:renderArchivados,especificacion:renderEspecificacion,seguimiento:renderSeguimiento,evidencias:renderEvidencias,solicitudes:()=>renderProximamente('solicitudes','Solicitudes','ti-send','Captura y gestión de solicitudes de desarrollo antes del relevamiento funcional.'),historias:()=>renderProximamente('historias','Historias de usuario','ti-subtask','Generación de historias de usuario en formato Como/Quiero/Para con exportación a Jira y Azure DevOps.'),qa:()=>renderProximamente('qa','Control de calidad (QA)','ti-bug','Casos de prueba, ejecuciones y registro de defectos por requerimiento.'),uat:()=>renderProximamente('uat','Pruebas de aceptación (UAT)','ti-user-check','Gestión de pruebas de aceptación con evidencias y aprobación formal.'),reportes:()=>renderProximamente('reportes','Reportes','ti-chart-bar','Reportes de avance, métricas de calidad y dashboards ejecutivos por proyecto.')};
   c.innerHTML=(map[v]||renderDashboard)();
 }
 
@@ -1504,6 +1511,20 @@ function renderSeguimiento(){
       </div>`).join(''):`<div class="kanban-empty">Vacío</div>`}
     </div>`;
   }).join('')}</div>`;
+}
+
+/* ── PRÓXIMAMENTE ── */
+function renderProximamente(id,titulo,icono,descripcion){
+  return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;text-align:center;padding:40px">
+    <div style="width:64px;height:64px;border-radius:16px;background:var(--color-background-secondary);display:flex;align-items:center;justify-content:center;margin-bottom:20px">
+      <i class="ti ${icono}" style="font-size:28px;color:var(--color-text-tertiary)"></i>
+    </div>
+    <div style="font-size:18px;font-weight:500;margin-bottom:8px">${titulo}</div>
+    <div style="font-size:13px;color:var(--color-text-secondary);max-width:400px;line-height:1.7;margin-bottom:20px">${descripcion}</div>
+    <span style="display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;background:var(--color-background-secondary);font-size:12px;color:var(--color-text-tertiary);font-weight:500">
+      <i class="ti ti-hammer" style="font-size:12px"></i> En desarrollo — próximamente
+    </span>
+  </div>`;
 }
 
 /* ── EVIDENCIAS ── */
