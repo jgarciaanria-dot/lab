@@ -885,6 +885,12 @@ function importarDatos(input){
       input.value='';
       alert('¡Datos importados correctamente!');
       navigate('dashboard');
+    }catch(err){
+      alert('Error al leer el archivo: '+err.message);
+    }
+  };
+  reader.readAsText(file);
+}
 
 /* ── API KEY ── */
 function getApiKey(){
@@ -935,13 +941,6 @@ function checkApiKey(){
     return false;
   }
   return true;
-}
-
-    }catch(err){
-      alert('Error al leer el archivo: '+err.message);
-    }
-  };
-  reader.readAsText(file);
 }
 
 </script>
