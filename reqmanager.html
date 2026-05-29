@@ -930,11 +930,12 @@ ${relevs.map((r,i)=>`${i+1}. Problema: ${r.problema}. Flujo actual: ${r.flujo_ac
 REQUERIMIENTOS FUNCIONALES (${reqs.length}):
 ${reqs.map((r,i)=>`RF-${String(i+1).padStart(2,'0')}: ${r.titulo}. ${r.descripcion||''}. Criterios: ${r.criterios||'N/A'}. Prioridad: ${r.prioridad}. Complejidad: ${r.complejidad||'Media'}. Esfuerzo: ${r.esfuerzo_horas?r.esfuerzo_horas+' horas':'No definido'}. Dependencias: ${r.dependencias||'Ninguna'}`).join('\n')||'No hay requerimientos registrados.'}
 
-INSTRUCCIONES:
-- Los criterios de aceptación en reqs_funcionales deben estar en formato Gherkin (Dado/Cuando/Entonces).
-- Identifica riesgos reales del proyecto basados en los relevamientos.
-- La matriz de trazabilidad debe vincular cada RF con los relevamientos que lo originaron.
-- "fuera_alcance" debe listar explícitamente qué NO cubre el sistema.
+INSTRUCCIONES CRÍTICAS — DEBES SEGUIRLAS SIN EXCEPCIÓN:
+1. Los criterios de aceptación de CADA requerimiento funcional DEBEN estar en formato Gherkin estricto. PROHIBIDO usar listas con punto y coma. Formato obligatorio:
+   "Dado [contexto o precondición]\\nCuando [acción del usuario o evento]\\nEntonces [resultado esperado verificable]\\n\\nEscenario 2:\\nDado [contexto]\\nCuando [acción]\\nEntonces [resultado]"
+2. Identifica al menos 3 riesgos reales del proyecto.
+3. La matriz de trazabilidad debe tener una entrada por cada RF generado.
+4. "fuera_alcance" debe listar mínimo 3 elementos que explícitamente NO cubre el sistema.
 
 Responde SOLO con este JSON, sin texto adicional ni backticks:
 {
@@ -1037,7 +1038,7 @@ function viewErs(i){
   const html=`<h3>ERS-${String(i+1).padStart(3,'0')} — ${escH(e.proyecto)}</h3>
     <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn sm" onclick="closeModal();exportErsPDF(${i})"><i class="ti ti-file-export"></i> Exportar PDF</button>
-      <button class="btn sm danger" onclick="deleteErs(${i})"><i class="ti ti-trash"></i></button>
+      <button class="btn sm danger" onclick="closeModal();deleteErs(${i})"><i class="ti ti-trash"></i> Eliminar</button>
     </div>
     <div class="ers-section"><h4>Objetivo del sistema</h4><p>${escH(e.objetivo)}</p></div>
     <div class="ers-section"><h4>Alcance</h4><p>${escH(e.alcance)}</p></div>
@@ -1203,7 +1204,29 @@ function guardarCronograma(ersIdx){
   }catch(err){if(err.message!=='missing_motivo')throw err;}
 }
 
-function deleteErs(i){if(confirm('¿Eliminar esta ERS?')){const a=DB.ers();a.splice(i,1);DB.saveErs(a);closeModal();renderView(currentView);}}
+function deleteErs(i){
+  const e=DB.ers()[i];
+  showModal(`<h3>Eliminar especificación</h3>
+    <div style="padding:16px;background:var(--color-background-secondary);border-radius:8px;margin-bottom:16px">
+      <div style="font-size:13px;font-weight:500;margin-bottom:4px">ERS-${String(i+1).padStart(3,'0')} — ${escH(e.proyecto)}</div>
+      <div style="font-size:12px;color:var(--color-text-secondary)">${e.total_reqs||0} requerimientos · Generada: ${e.fecha||''}</div>
+    </div>
+    <p style="font-size:13px;color:var(--color-text-secondary);line-height:1.6;margin-bottom:16px">
+      Esta acción es <strong>permanente</strong>. Se eliminará la ERS, el cronograma y el historial de cambios asociado. Los requerimientos del proyecto no se verán afectados.
+    </p>
+    <div style="display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn" style="background:var(--color-text-danger);color:white;border-color:transparent" onclick="confirmarDeleteErs(${i})"><i class="ti ti-trash"></i> Sí, eliminar</button>
+    </div>`);
+}
+
+function confirmarDeleteErs(i){
+  const a=DB.ers();
+  a.splice(i,1);
+  DB.saveErs(a);
+  closeModal();
+  renderView(currentView);
+}
 
 function exportErsPDF(i){
   const e=DB.ers()[i];
