@@ -566,41 +566,70 @@ function renderRequerimientos(){
     <span id="sel-count" style="font-size:12px;color:var(--color-text-tertiary)"></span>
   </div>`;
 
-  // Agrupar por proyecto
-  const grupos={};
+  // Nivel 1: agrupar por proyecto
+  const porProyecto={};
   reqs.forEach((r,i)=>{
-    const key=r.proyecto||'__sin_proyecto__';
-    if(!grupos[key])grupos[key]=[];
-    grupos[key].push({...r,_idx:i});
+    const proj=r.proyecto||'__sin_proyecto__';
+    if(!porProyecto[proj])porProyecto[proj]=[];
+    porProyecto[proj].push({...r,_idx:i});
   });
 
-  const gruposHtml=Object.entries(grupos).map(([proj,items])=>{
-    const label=proj==='__sin_proyecto__'?'Sin proyecto':proj;
+  const gruposHtml=Object.entries(porProyecto).map(([proj,itemsProj])=>{
+    const labelProj=proj==='__sin_proyecto__'?'Sin proyecto':proj;
     const groupId='grp-'+proj.replace(/[^a-zA-Z0-9]/g,'_');
-    const itemsHtml=items.map((r,posEnGrupo)=>`<div class="req-item" data-estado="${r.estado}" data-proyecto="${escH(r.proyecto||'')}" data-idx="${r._idx}" style="display:flex;align-items:flex-start;gap:10px;margin-bottom:6px;border-radius:6px">
-      <input type="checkbox" class="req-checkbox" data-idx="${r._idx}" onchange="updateSelCount()" onclick="event.stopPropagation()" style="width:15px;height:15px;margin-top:3px;cursor:pointer;flex-shrink:0">
-      <div style="flex:1;min-width:0" onclick="editReq(${r._idx})">
-        <div class="req-id">RF-${String(posEnGrupo+1).padStart(3,'0')}</div>
-        <div class="req-title">${escH(r.titulo)}</div>
-        <div class="req-meta">
-          <span class="badge ${STATE_KEY[STATES.indexOf(r.estado)]||'pending'}">${r.estado}</span>
-          <span class="badge ${PRIO_KEY[PRIO.indexOf(r.prioridad)]||'medium'}">${r.prioridad}</span>
-          ${r.ia_generado?`<span style="font-size:11px;color:var(--color-text-tertiary)"><i class="ti ti-sparkles" style="font-size:11px"></i> IA</span>`:''}
+
+    // Nivel 2: agrupar por origen (solicitud/relevamiento) dentro del proyecto
+    const porOrigen={};
+    itemsProj.forEach(r=>{
+      // Extraer clave de origen: "REL-001 · ..." o "Sin trazabilidad"
+      let origenKey='__sin_trazabilidad__';
+      let origenLabel='Sin trazabilidad';
+      if(r.origen){
+        // Detectar REL o SOL en el origen
+        const matchRel=r.origen.match(/REL-\d+/);
+        const matchSol=r.origen.match(/SOL-\d+/);
+        if(matchRel){origenKey=matchRel[0];origenLabel=r.origen.substring(0,80)+(r.origen.length>80?'…':'');}
+        else if(matchSol){origenKey=matchSol[0];origenLabel=r.origen.substring(0,80)+(r.origen.length>80?'…':'');}
+      }
+      if(!porOrigen[origenKey])porOrigen[origenKey]={label:origenLabel,items:[]};
+      porOrigen[origenKey].items.push(r);
+    });
+
+    const subgruposHtml=Object.entries(porOrigen).map(([origenKey,{label:origenLabel,items:itemsOrigen}])=>{
+      const subId='sub-'+groupId+'-'+origenKey.replace(/[^a-zA-Z0-9]/g,'_');
+      const esOrigen=origenKey!=='__sin_trazabilidad__';
+      const rfHtml=itemsOrigen.map((r,posEnOrigen)=>`<div class="req-item" data-estado="${r.estado}" data-proyecto="${escH(r.proyecto||'')}" data-idx="${r._idx}" style="display:flex;align-items:flex-start;gap:10px;margin-bottom:5px;border-radius:6px">
+        <input type="checkbox" class="req-checkbox" data-idx="${r._idx}" onchange="updateSelCount()" onclick="event.stopPropagation()" style="width:14px;height:14px;margin-top:3px;cursor:pointer;flex-shrink:0">
+        <div style="flex:1;min-width:0" onclick="editReq(${r._idx})">
+          <div class="req-id" style="font-size:10px">RF-${String(posEnOrigen+1).padStart(3,'0')}</div>
+          <div class="req-title" style="font-size:12px">${escH(r.titulo)}</div>
+          <div class="req-meta">
+            <span class="badge ${STATE_KEY[STATES.indexOf(r.estado)]||'pending'}" style="font-size:10px">${r.estado}</span>
+            <span class="badge ${PRIO_KEY[PRIO.indexOf(r.prioridad)]||'medium'}" style="font-size:10px">${r.prioridad}</span>
+            ${r.ia_generado?`<span style="font-size:10px;color:var(--color-text-tertiary)"><i class="ti ti-sparkles" style="font-size:10px"></i> IA</span>`:''}
+          </div>
         </div>
-        ${r.origen?`<div style="font-size:11px;color:var(--color-text-tertiary);margin-top:4px;display:flex;align-items:center;gap:4px"><i class="ti ti-link" style="font-size:10px;color:var(--color-text-info)"></i>${escH(r.origen)}</div>`:''}
-      </div>
-    </div>`).join('');
+      </div>`).join('');
+
+      return `<div style="margin-bottom:6px">
+        <div onclick="toggleGroup('${subId}')" style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:var(--color-background-secondary);border-radius:6px;cursor:pointer;user-select:none;border:0.5px solid var(--color-border-tertiary)" onmouseover="this.style.opacity='.8'" onmouseout="this.style.opacity='1'">
+          <i class="ti ${esOrigen?'ti-file-text':'ti-minus'}" style="font-size:13px;color:${esOrigen?'var(--color-text-secondary)':'var(--color-text-tertiary)'}"></i>
+          <span style="font-size:12px;color:var(--color-text-secondary);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(origenLabel)}</span>
+          <span style="font-size:11px;color:var(--color-text-tertiary);flex-shrink:0">${itemsOrigen.length} RF</span>
+          <i id="${subId}-chevron" class="ti ti-chevron-right" style="font-size:12px;color:var(--color-text-tertiary);transition:transform .2s;flex-shrink:0"></i>
+        </div>
+        <div id="${subId}" style="display:none;padding:6px 0 0 16px">${rfHtml}</div>
+      </div>`;
+    }).join('');
 
     return `<div class="req-group" data-group="${escH(proj)}" style="margin-bottom:10px">
       <div onclick="toggleGroup('${groupId}')" style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:8px;cursor:pointer;user-select:none;transition:background .12s" onmouseover="this.style.background='var(--color-background-secondary)'" onmouseout="this.style.background='var(--color-background-primary)'">
         <i id="${groupId}-icon" class="ti ti-folder" style="font-size:16px;color:var(--color-text-info)"></i>
-        <span style="font-size:13px;font-weight:500;flex:1">${escH(label)}</span>
-        <span class="badge analysis" style="font-size:11px">${items.length} req${items.length!==1?'s':''}</span>
+        <span style="font-size:13px;font-weight:500;flex:1">${escH(labelProj)}</span>
+        <span class="badge analysis" style="font-size:11px">${itemsProj.length} req${itemsProj.length!==1?'s':''}</span>
         <i id="${groupId}-chevron" class="ti ti-chevron-right" style="font-size:14px;color:var(--color-text-tertiary);transition:transform .2s"></i>
       </div>
-      <div id="${groupId}" style="display:none;padding:8px 0 0 12px">
-        ${itemsHtml}
-      </div>
+      <div id="${groupId}" style="display:none;padding:8px 0 0 12px">${subgruposHtml}</div>
     </div>`;
   }).join('');
 
