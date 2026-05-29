@@ -641,14 +641,29 @@ Genera entre 3 y 6 requerimientos funcionales. Responde SOLO con este JSON, sin 
   try{
     const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${getApiKey()}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})});
     const data=await res.json();
+    // Detectar error de API (key inválida, cuota, etc.)
+    if(data.error){
+      document.getElementById('ai-stream').textContent='Error de la API de Gemini:\n\n'+data.error.message+'\n\nVerifica tu API key en Datos → Configurar API key.';
+      return;
+    }
     const text=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
-    const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+    if(!text){
+      document.getElementById('ai-stream').textContent='Gemini no devolvió contenido.\n\nRespuesta completa:\n'+JSON.stringify(data,null,2);
+      return;
+    }
+    let parsed;
+    try{
+      parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+    }catch(parseErr){
+      document.getElementById('ai-stream').textContent='Error al interpretar la respuesta de Gemini.\n\nRespuesta recibida:\n'+text;
+      return;
+    }
     const reqs=DB.requerimientos();let added=0;
     parsed.requerimientos.forEach(r=>{reqs.push({titulo:r.titulo,descripcion:r.descripcion,prioridad:r.prioridad,criterios:r.criterios,estado:'Pendiente',proyecto:rel.proyecto,ia_generado:true,fecha:new Date().toISOString().split('T')[0]});added++;});
     DB.saveRequerimientos(reqs);
     const relevs=DB.relevamientos();if(relevs[relIdx])relevs[relIdx].reqs_generados=added;DB.saveRelevamientos(relevs);
     renderView('requerimientos');
-  }catch(e){document.getElementById('ai-stream').textContent='Error al conectar con la IA.\n\nDetalle: '+e.message;}
+  }catch(e){document.getElementById('ai-stream').textContent='Error de red al conectar con la IA.\n\nDetalle: '+e.message;}
 }
 
 /* ── ESPECIFICACIÓN ERS ── */
@@ -725,14 +740,29 @@ Genera la ERS completa. Responde SOLO con este JSON, sin texto adicional ni back
   try{
     const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${getApiKey()}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})});
     const data=await res.json();
+    // Detectar error de API (key inválida, cuota, etc.)
+    if(data.error){
+      document.getElementById('ai-stream').textContent='Error de la API de Gemini:\n\n'+data.error.message+'\n\nVerifica tu API key en Datos → Configurar API key.';
+      return;
+    }
     const text=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
-    const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+    if(!text){
+      document.getElementById('ai-stream').textContent='Gemini no devolvió contenido.\n\nRespuesta completa:\n'+JSON.stringify(data,null,2);
+      return;
+    }
+    let parsed;
+    try{
+      parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+    }catch(parseErr){
+      document.getElementById('ai-stream').textContent='Error al interpretar la respuesta de Gemini.\n\nRespuesta recibida:\n'+text;
+      return;
+    }
     const ersArr=DB.ers();
     const newErs={proyecto,objetivo:parsed.objetivo,alcance:parsed.alcance,stakeholders:parsed.stakeholders||[],reqs_funcionales:parsed.reqs_funcionales||[],reqs_no_funcionales:parsed.reqs_no_funcionales||[],reglas_negocio:parsed.reglas_negocio||[],restricciones:parsed.restricciones||[],supuestos:parsed.supuestos||[],total_reqs:(parsed.reqs_funcionales||[]).length,fecha:new Date().toISOString().split('T')[0]};
     ersArr.push(newErs);
     DB.saveErs(ersArr);
     renderView('especificacion');
-  }catch(e){document.getElementById('ai-stream').textContent='Error al generar la ERS.\n\nDetalle: '+e.message;}
+  }catch(e){document.getElementById('ai-stream').textContent='Error de red al conectar con la IA.\n\nDetalle: '+e.message;}
 }
 
 function viewErs(i){
