@@ -1610,7 +1610,7 @@ function deleteSolicitud(i){
 function viewSolicitud(i){
   const s=DB.solicitudes()[i];
   const evalHtml=s.evaluacion_ia?`<div class="ai-box" style="margin-top:12px">
-    <div class="ai-header"><i class="ti ti-sparkles"></i> Evaluación de IA</div>
+    <div class="ai-header"><i class="ti ti-sparkles"></i> Evaluación de IA${s.proyecto?' — con contexto del proyecto':' — evaluación general'}</div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
       <div style="background:var(--color-background-primary);border-radius:6px;padding:8px 10px;text-align:center">
         <div style="font-size:10px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;margin-bottom:3px">Complejidad</div>
@@ -1625,8 +1625,11 @@ function viewSolicitud(i){
         <div style="font-size:14px;font-weight:500">${escH(s.evaluacion_ia.esfuerzo_estimado||'—')}</div>
       </div>
     </div>
+    ${s.evaluacion_ia.ya_cubierta?`<div style="font-size:12px;padding:8px 10px;border-radius:6px;background:var(--color-background-primary);border-left:2px solid var(--color-text-danger);margin-bottom:8px"><b>⚠ Ya cubierta:</b> Esta solicitud podría estar cubierta por requerimientos existentes del proyecto.</div>`:''}
+    ${s.evaluacion_ia.conflictos?`<div style="font-size:12px;padding:8px 10px;border-radius:6px;background:var(--color-background-primary);border-left:2px solid var(--color-text-danger);margin-bottom:8px"><b>Conflictos detectados:</b> ${escH(s.evaluacion_ia.conflictos)}</div>`:''}
     <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.6;margin-bottom:8px">${escH(s.evaluacion_ia.resumen||'')}</div>
     ${s.evaluacion_ia.recomendacion?`<div style="font-size:12px;padding:8px 10px;border-radius:6px;background:var(--color-background-primary);border-left:2px solid var(--color-text-info)"><b>Recomendación:</b> ${escH(s.evaluacion_ia.recomendacion)}</div>`:''}
+    ${s.evaluacion_ia.puntos_clave?.length?`<div style="margin-top:8px;font-size:12px;color:var(--color-text-secondary)"><b style="color:var(--color-text-primary)">Puntos clave:</b><ul style="margin:4px 0 0 16px">${s.evaluacion_ia.puntos_clave.map(p=>`<li style="margin-bottom:2px">${escH(p)}</li>`).join('')}</ul></div>`:''}
   </div>`:'';
 
   showModal(`<h3>SOL-${String(i+1).padStart(3,'0')} — ${escH(s.titulo)}</h3>
@@ -1652,27 +1655,54 @@ async function evaluarSolicitudIA(idx){
   if(!checkApiKey())return;
   const titulo=v('sol-titulo');const desc=v('sol-desc');
   if(!titulo||!desc){alert('Completa el título y la descripción primero.');return;}
-  const btn=document.querySelector('button[onclick*="evaluarSolicitudIA"]');
-  if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-sparkles"></i> Evaluando...';}
+  const proyecto=v('sol-proyecto');
 
-  const prompt=`Eres un analista funcional senior. Evalúa la siguiente solicitud de desarrollo de software y responde SOLO con este JSON, sin texto adicional ni backticks:
+  // Construir contexto del proyecto si existe
+  let contextoProyecto='';
+  if(proyecto){
+    const proj=DB.projects().find(p=>p.nombre===proyecto);
+    const relevs=DB.relevamientos().filter(r=>r.proyecto===proyecto);
+    const reqs=DB.requerimientos().filter(r=>r.proyecto===proyecto);
+    const ers=DB.ers().filter(e=>e.proyecto===proyecto);
+    contextoProyecto=`
+CONTEXTO DEL PROYECTO EXISTENTE — "${proyecto}":
+- Estado del proyecto: ${proj?.estado||'No definido'} · Área: ${proj?.area||'—'} · Responsable: ${proj?.responsable||'—'}
+- Relevamientos documentados (${relevs.length}): ${relevs.map(r=>r.problema).join(' | ')||'Ninguno'}
+- Requerimientos existentes (${reqs.length}): ${reqs.map((r,i)=>`RF-${i+1}: ${r.titulo}`).join(' | ')||'Ninguno'}
+- ERS generadas: ${ers.length>0?ers.map(e=>`ERS con ${e.total_reqs} reqs (${e.fecha})`).join(', '):'Ninguna'}
+
+Con base en este contexto, evalúa si la solicitud:
+1. Ya está cubierta por requerimientos existentes
+2. Contradice o afecta requerimientos ya documentados
+3. Complementa o extiende funcionalidad existente
+4. Requiere un nuevo relevamiento formal`;
+  }
+
+  const prompt=`Eres un analista funcional senior. Evalúa la siguiente solicitud de desarrollo de software.${proyecto?'':' No hay proyecto asociado, haz una evaluación general.'}
+${contextoProyecto}
+
+SOLICITUD:
+- Título: ${titulo}
+- Área solicitante: ${v('sol-area')}
+- Descripción: ${desc}
+- Impacto declarado: ${v('sol-impacto')}
+- Urgencia declarada: ${v('sol-urgencia')}
+
+Responde SOLO con este JSON, sin texto adicional ni backticks:
 {
   "complejidad": "Baja|Media|Alta",
   "riesgo": "Bajo|Medio|Alto",
   "esfuerzo_estimado": "ej: 2-4 semanas",
   "amerita_relevamiento": true,
-  "resumen": "Resumen ejecutivo de 2-3 oraciones sobre la solicitud",
+  "resumen": "Resumen ejecutivo de 2-3 oraciones sobre la solicitud y su relación con el proyecto",
   "recomendacion": "Qué hacer: aprobar, rechazar o solicitar más información y por qué",
+  "ya_cubierta": false,
+  "conflictos": "Descripción de conflictos con requerimientos existentes o vacío si no hay",
   "puntos_clave": ["Punto importante 1", "Punto 2", "Punto 3"]
-}
+}`;
 
-SOLICITUD:
-Título: ${titulo}
-Área: ${v('sol-area')}
-Descripción: ${desc}
-Impacto declarado: ${v('sol-impacto')}
-Urgencia declarada: ${v('sol-urgencia')}`;
-
+  const btn=document.querySelector('button[onclick*="evaluarSolicitudIA"]');
+  if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-sparkles"></i> Evaluando...';}
   try{
     const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${getApiKey()}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})});
     const data=await res.json();
@@ -1681,9 +1711,8 @@ Urgencia declarada: ${v('sol-urgencia')}`;
     const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
     const arr=DB.solicitudes();
     const realIdx=idx>=0?idx:arr.length;
-    // Guardar primero si es nueva
     if(idx<0){
-      const s={titulo:v('sol-titulo'),proyecto:v('sol-proyecto'),area:v('sol-area'),solicitante:v('sol-solicitante'),descripcion:v('sol-desc'),impacto:v('sol-impacto'),urgencia:v('sol-urgencia'),estado:v('sol-estado')||'En evaluación',fecha:v('sol-fecha'),notas_evaluacion:v('sol-notas'),ia_evaluado:true,evaluacion_ia:parsed};
+      const s={titulo:v('sol-titulo'),proyecto:v('sol-proyecto'),area:v('sol-area'),solicitante:v('sol-solicitante'),descripcion:v('sol-desc'),impacto:v('sol-impacto'),urgencia:v('sol-urgencia'),estado:'En evaluación',fecha:v('sol-fecha'),notas_evaluacion:v('sol-notas'),ia_evaluado:true,evaluacion_ia:parsed};
       arr.push(s);
     } else {
       arr[idx].ia_evaluado=true;arr[idx].evaluacion_ia=parsed;
@@ -1698,23 +1727,51 @@ Urgencia declarada: ${v('sol-urgencia')}`;
 async function evaluarSolicitudIAView(i){
   if(!checkApiKey())return;
   const s=DB.solicitudes()[i];
-  const prompt=`Eres un analista funcional senior. Evalúa la siguiente solicitud de desarrollo de software y responde SOLO con este JSON, sin texto adicional ni backticks:
+
+  // Construir contexto del proyecto si existe
+  let contextoProyecto='';
+  if(s.proyecto){
+    const proj=DB.projects().find(p=>p.nombre===s.proyecto);
+    const relevs=DB.relevamientos().filter(r=>r.proyecto===s.proyecto);
+    const reqs=DB.requerimientos().filter(r=>r.proyecto===s.proyecto);
+    const ers=DB.ers().filter(e=>e.proyecto===s.proyecto);
+    contextoProyecto=`
+CONTEXTO DEL PROYECTO EXISTENTE — "${s.proyecto}":
+- Estado del proyecto: ${proj?.estado||'No definido'} · Área: ${proj?.area||'—'} · Responsable: ${proj?.responsable||'—'}
+- Relevamientos documentados (${relevs.length}): ${relevs.map(r=>r.problema).join(' | ')||'Ninguno'}
+- Requerimientos existentes (${reqs.length}): ${reqs.map((r,i)=>`RF-${i+1}: ${r.titulo}`).join(' | ')||'Ninguno'}
+- ERS generadas: ${ers.length>0?ers.map(e=>`ERS con ${e.total_reqs} reqs (${e.fecha})`).join(', '):'Ninguna'}
+
+Con base en este contexto, evalúa si la solicitud:
+1. Ya está cubierta por requerimientos existentes
+2. Contradice o afecta requerimientos ya documentados
+3. Complementa o extiende funcionalidad existente
+4. Requiere un nuevo relevamiento formal`;
+  }
+
+  const prompt=`Eres un analista funcional senior. Evalúa la siguiente solicitud de desarrollo de software.${s.proyecto?'':'  No hay proyecto asociado, haz una evaluación general.'}
+${contextoProyecto}
+
+SOLICITUD:
+- Título: ${s.titulo}
+- Área solicitante: ${s.area}
+- Solicitante: ${s.solicitante||'No especificado'}
+- Descripción: ${s.descripcion}
+- Impacto declarado: ${s.impacto}
+- Urgencia declarada: ${s.urgencia}
+
+Responde SOLO con este JSON, sin texto adicional ni backticks:
 {
   "complejidad": "Baja|Media|Alta",
   "riesgo": "Bajo|Medio|Alto",
   "esfuerzo_estimado": "ej: 2-4 semanas",
   "amerita_relevamiento": true,
-  "resumen": "Resumen ejecutivo de 2-3 oraciones sobre la solicitud",
+  "resumen": "Resumen ejecutivo de 2-3 oraciones sobre la solicitud y su relación con el proyecto",
   "recomendacion": "Qué hacer: aprobar, rechazar o solicitar más información y por qué",
+  "ya_cubierta": ${s.proyecto?'true|false':'false'},
+  "conflictos": "Descripción de conflictos con requerimientos existentes o vacío si no hay",
   "puntos_clave": ["Punto importante 1", "Punto 2", "Punto 3"]
-}
-
-SOLICITUD:
-Título: ${s.titulo}
-Área: ${s.area}
-Descripción: ${s.descripcion}
-Impacto declarado: ${s.impacto}
-Urgencia declarada: ${s.urgencia}`;
+}`;
 
   try{
     const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${getApiKey()}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})});
