@@ -169,6 +169,7 @@ tr:hover td{background:var(--color-background-secondary)}
       <div class="nav-section">Trabajo</div>
       <div class="nav-item" onclick="navigate('relevamientos')"><i class="ti ti-clipboard-list"></i>Relevamientos</div>
       <div class="nav-item" onclick="navigate('requerimientos')"><i class="ti ti-list-check"></i>Requerimientos</div>
+      <div class="nav-item" onclick="navigate('archivados')"><i class="ti ti-archive"></i>Archivados</div>
       <div class="nav-item" onclick="navigate('especificacion')"><i class="ti ti-file-description"></i>Especificación (ERS)</div>
       <div class="nav-item" onclick="navigate('seguimiento')"><i class="ti ti-git-branch"></i>Seguimiento</div>
       <div class="nav-section">Recursos</div>
@@ -201,6 +202,8 @@ const DB={
   saveRelevamientos(d){this.set('relevamientos',d);flashSave()},
   requerimientos(){return this.get('requerimientos')||[]},
   saveRequerimientos(d){this.set('requerimientos',d);flashSave()},
+  archivados(){return this.get('archivados')||[]},
+  saveArchivados(d){this.set('archivados',d);flashSave()},
   ers(){return this.get('ers')||[]},
   saveErs(d){this.set('ers',d);flashSave()}
 };
@@ -243,7 +246,7 @@ function navigate(view){
   document.querySelectorAll('.nav-item').forEach(el=>{
     el.classList.toggle('active',el.getAttribute('onclick')===`navigate('${view}')`);
   });
-  const titles={dashboard:'Dashboard ejecutivo',projects:'Proyectos',relevamientos:'Relevamientos funcionales',requerimientos:'Requerimientos',especificacion:'Especificación (ERS)',seguimiento:'Seguimiento Kanban',evidencias:'Evidencias'};
+  const titles={dashboard:'Dashboard ejecutivo',projects:'Proyectos',relevamientos:'Relevamientos funcionales',requerimientos:'Requerimientos',archivados:'Requerimientos archivados',especificacion:'Especificación (ERS)',seguimiento:'Seguimiento Kanban',evidencias:'Evidencias'};
   document.getElementById('topbar-title').textContent=titles[view]||view;
   const acts=document.getElementById('topbar-actions');
   acts.innerHTML='';
@@ -267,7 +270,7 @@ function mkBtn(cls,html,fn){
 
 function renderView(v){
   const c=document.getElementById('content');
-  const map={dashboard:renderDashboard,projects:renderProjects,relevamientos:renderRelevamientos,requerimientos:renderRequerimientos,especificacion:renderEspecificacion,seguimiento:renderSeguimiento,evidencias:renderEvidencias};
+  const map={dashboard:renderDashboard,projects:renderProjects,relevamientos:renderRelevamientos,requerimientos:renderRequerimientos,archivados:renderArchivados,especificacion:renderEspecificacion,seguimiento:renderSeguimiento,evidencias:renderEvidencias};
   c.innerHTML=(map[v]||renderDashboard)();
 }
 
@@ -544,9 +547,9 @@ function renderRequerimientos(){
         <i id="${groupId}-icon" class="ti ti-folder" style="font-size:16px;color:var(--color-text-info)"></i>
         <span style="font-size:13px;font-weight:500;flex:1">${escH(label)}</span>
         <span class="badge analysis" style="font-size:11px">${items.length} req${items.length!==1?'s':''}</span>
-        <i id="${groupId}-chevron" class="ti ti-chevron-down" style="font-size:14px;color:var(--color-text-tertiary);transition:transform .2s"></i>
+        <i id="${groupId}-chevron" class="ti ti-chevron-right" style="font-size:14px;color:var(--color-text-tertiary);transition:transform .2s"></i>
       </div>
-      <div id="${groupId}" style="padding:8px 0 0 12px">
+      <div id="${groupId}" style="display:none;padding:8px 0 0 12px">
         ${itemsHtml}
       </div>
     </div>`;
@@ -562,7 +565,7 @@ function toggleGroup(groupId){
   if(!el)return;
   const isOpen=el.style.display!=='none';
   el.style.display=isOpen?'none':'block';
-  if(chevron)chevron.style.transform=isOpen?'rotate(-90deg)':'rotate(0deg)';
+  if(chevron)chevron.style.transform=isOpen?'rotate(0deg)':'rotate(90deg)';
   if(icon)icon.className=isOpen?'ti ti-folder':'ti ti-folder-open';
 }
 
@@ -678,7 +681,7 @@ function openReqModal(req,idx){
       <input type="hidden" id="rq-estado" value="${r.estado}">
     </div>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
-      ${isEdit?`<button class="btn danger" onclick="deleteReq(${idx})"><i class="ti ti-trash"></i></button>`:''}
+      ${isEdit?`<button class="btn danger" onclick="archivarReq(${idx})" title="Archivar requerimiento"><i class="ti ti-archive"></i></button>`:''}
       <button class="btn" onclick="closeModal()">Cancelar</button>
       <button class="btn primary" onclick="saveReq(${isEdit?idx:-1})"><i class="ti ti-check"></i> Guardar</button>
     </div>`);
@@ -705,7 +708,53 @@ function saveReq(idx){
   DB.saveRequerimientos(arr);closeModal();renderView(currentView);
 }
 function editReq(i){openReqModal(DB.requerimientos()[i],i);}
-function deleteReq(i){if(confirm('¿Eliminar?')){const a=DB.requerimientos();a.splice(i,1);DB.saveRequerimientos(a);closeModal();renderView(currentView);}}
+function deleteReq(i){if(confirm('¿Eliminar definitivamente?')){const a=DB.requerimientos();a.splice(i,1);DB.saveRequerimientos(a);closeModal();renderView(currentView);}}
+
+function archivarReq(i){
+  if(!confirm('¿Archivar este requerimiento? Podrás consultarlo y restaurarlo desde la sección Archivados.'))return;
+  const reqs=DB.requerimientos();
+  const req={...reqs[i],fecha_archivado:new Date().toISOString().split('T')[0],idx_original:i};
+  reqs.splice(i,1);
+  DB.saveRequerimientos(reqs);
+  const arch=DB.archivados();
+  arch.push(req);
+  DB.saveArchivados(arch);
+  closeModal();
+  renderView(currentView);
+}
+
+function renderArchivados(){
+  const arch=DB.archivados();
+  if(!arch.length)return `<div class="empty-state"><i class="ti ti-archive"></i><p>No hay requerimientos archivados.</p></div>`;
+  return arch.map((r,i)=>`<div class="req-item" style="opacity:.8">
+    <div style="flex:1;min-width:0">
+      <div class="req-id">${escH(r.proyecto||'Sin proyecto')} · Archivado: ${r.fecha_archivado||''}</div>
+      <div class="req-title">${escH(r.titulo)}</div>
+      <div class="req-meta" style="justify-content:space-between">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <span class="badge ${STATE_KEY[STATES.indexOf(r.estado)]||'pending'}">${r.estado}</span>
+          <span class="badge ${PRIO_KEY[PRIO.indexOf(r.prioridad)]||'medium'}">${r.prioridad}</span>
+          ${r.ia_generado?`<span style="font-size:11px;color:var(--color-text-tertiary)"><i class="ti ti-sparkles" style="font-size:11px"></i> IA</span>`:''}
+        </div>
+        <button class="btn sm success" onclick="restaurarReq(${i})"><i class="ti ti-restore"></i> Restaurar</button>
+      </div>
+      ${r.descripcion?`<div style="font-size:12px;color:var(--color-text-secondary);margin-top:6px;line-height:1.5">${escH(r.descripcion)}</div>`:''}
+    </div>
+  </div>`).join('');
+}
+
+function restaurarReq(i){
+  if(!confirm('¿Restaurar este requerimiento a la lista activa?'))return;
+  const arch=DB.archivados();
+  const req={...arch[i]};
+  delete req.fecha_archivado;delete req.idx_original;
+  arch.splice(i,1);
+  DB.saveArchivados(arch);
+  const reqs=DB.requerimientos();
+  reqs.push(req);
+  DB.saveRequerimientos(reqs);
+  renderView(currentView);
+}
 
 /* ── IA GENERAR REQS ── */
 async function generarReqsDesdeRelevamiento(rel,relIdx){
@@ -944,65 +993,105 @@ function editarCronograma(ersIdx){
   if(!e.cronograma)return;
   const fases=e.cronograma.fases||[];
   showModal(`<h3>Editar cronograma</h3>
-    <p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:14px;line-height:1.6">Modifica las fechas y duración de cada fase. Al guardar debes indicar el motivo del cambio para mantener la trazabilidad.</p>
-    <div class="form-row" style="margin-bottom:14px">
-      <div class="field"><label>Total de horas</label><input type="number" id="cron-total-horas" value="${e.cronograma.total_horas||0}" min="0"></div>
-      <div class="field"><label>Fecha de entrega estimada</label><input type="date" id="cron-fecha-entrega" value="${e.cronograma.fecha_entrega_estimada||''}"></div>
+    <p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:14px;line-height:1.6">Modifica los campos necesarios. Cada cambio requiere un motivo registrado.</p>
+    <div class="form-row" style="margin-bottom:4px">
+      <div class="field">
+        <label>Total de horas</label>
+        <input type="number" id="cron-total-horas" value="${e.cronograma.total_horas||0}" min="0" onchange="mostrarMotivoInline('motivo-total-horas',this.value!=='${e.cronograma.total_horas||0}')">
+        <div id="motivo-total-horas" style="display:none;margin-top:6px"><textarea placeholder="Motivo del cambio en total de horas..." style="min-height:50px;font-size:12px" id="motivo-txt-total-horas"></textarea></div>
+      </div>
+      <div class="field">
+        <label>Fecha de entrega estimada</label>
+        <input type="date" id="cron-fecha-entrega" value="${e.cronograma.fecha_entrega_estimada||''}" onchange="mostrarMotivoInline('motivo-fecha-entrega',this.value!=='${e.cronograma.fecha_entrega_estimada||''}')">
+        <div id="motivo-fecha-entrega" style="display:none;margin-top:6px"><textarea placeholder="Motivo del cambio en fecha de entrega..." style="min-height:50px;font-size:12px" id="motivo-txt-fecha-entrega"></textarea></div>
+      </div>
     </div>
-    <div style="font-size:11px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Fases</div>
+    <div style="font-size:11px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 8px">Fases</div>
     ${fases.map((f,fi)=>`<div style="border:0.5px solid var(--color-border-tertiary);border-radius:6px;padding:10px 12px;margin-bottom:8px">
-      <div style="font-size:12px;font-weight:600;margin-bottom:8px">${escH(f.fase)}</div>
+      <div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--color-text-primary)">${escH(f.fase)}</div>
       <div class="form-row" style="margin-bottom:0">
-        <div class="field"><label>Fecha inicio</label><input type="date" id="cron-fi-${fi}" value="${f.fecha_inicio||''}"></div>
-        <div class="field"><label>Fecha fin</label><input type="date" id="cron-ff-${fi}" value="${f.fecha_fin||''}"></div>
-        <div class="field"><label>Días</label><input type="number" id="cron-fd-${fi}" value="${f.duracion_dias||0}" min="0" style="width:80px"></div>
+        <div class="field">
+          <label>Fecha inicio</label>
+          <input type="date" id="cron-fi-${fi}" value="${f.fecha_inicio||''}" onchange="mostrarMotivoInline('motivo-fi-${fi}',this.value!=='${f.fecha_inicio||''}')">
+          <div id="motivo-fi-${fi}" style="display:none;margin-top:6px"><textarea placeholder="Motivo del cambio..." style="min-height:50px;font-size:12px" id="motivo-txt-fi-${fi}"></textarea></div>
+        </div>
+        <div class="field">
+          <label>Fecha fin</label>
+          <input type="date" id="cron-ff-${fi}" value="${f.fecha_fin||''}" onchange="mostrarMotivoInline('motivo-ff-${fi}',this.value!=='${f.fecha_fin||''}')">
+          <div id="motivo-ff-${fi}" style="display:none;margin-top:6px"><textarea placeholder="Motivo del cambio..." style="min-height:50px;font-size:12px" id="motivo-txt-ff-${fi}"></textarea></div>
+        </div>
+        <div class="field" style="max-width:90px">
+          <label>Días</label>
+          <input type="number" id="cron-fd-${fi}" value="${f.duracion_dias||0}" min="0" onchange="mostrarMotivoInline('motivo-fd-${fi}',this.value!=='${f.duracion_dias||0}')">
+          <div id="motivo-fd-${fi}" style="display:none;margin-top:6px"><textarea placeholder="Motivo..." style="min-height:50px;font-size:12px" id="motivo-txt-fd-${fi}"></textarea></div>
+        </div>
       </div>
     </div>`).join('')}
-    <div class="field" style="margin-top:4px">
-      <label>Motivo del cambio <span style="color:var(--color-text-danger)">*</span></label>
-      <textarea id="cron-motivo" placeholder="Ej: El cliente solicitó extender la fase de UAT por disponibilidad del equipo..." style="min-height:70px"></textarea>
-    </div>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
       <button class="btn" onclick="closeModal();viewErs(${ersIdx})">Cancelar</button>
       <button class="btn primary" onclick="guardarCronograma(${ersIdx})"><i class="ti ti-check"></i> Guardar cambios</button>
     </div>`);
 }
 
+function mostrarMotivoInline(containerId, show){
+  const el=document.getElementById(containerId);
+  if(el)el.style.display=show?'block':'none';
+}
+
 function guardarCronograma(ersIdx){
-  const motivo=document.getElementById('cron-motivo')?.value.trim();
-  if(!motivo){alert('El motivo del cambio es obligatorio.');return;}
   const arr=DB.ers();
   const e=arr[ersIdx];
   const fases=e.cronograma.fases||[];
-
-  // Registrar cambios detectados
   const cambios=[];
+
+  const getMotivoTxt=id=>(document.getElementById(id)?.value||'').trim();
   const totalHorasNuevo=parseInt(document.getElementById('cron-total-horas')?.value)||0;
   const fechaEntregaNueva=document.getElementById('cron-fecha-entrega')?.value||'';
-  if(totalHorasNuevo!==e.cronograma.total_horas)cambios.push({campo:'Total de horas',valor_anterior:String(e.cronograma.total_horas||'—'),valor_nuevo:String(totalHorasNuevo)});
-  if(fechaEntregaNueva!==e.cronograma.fecha_entrega_estimada)cambios.push({campo:'Fecha de entrega',valor_anterior:e.cronograma.fecha_entrega_estimada||'—',valor_nuevo:fechaEntregaNueva});
+
+  if(totalHorasNuevo!==e.cronograma.total_horas){
+    const m=getMotivoTxt('motivo-txt-total-horas');
+    if(!m){alert('Ingresa el motivo del cambio en "Total de horas".');return;}
+    cambios.push({campo:'Total de horas',valor_anterior:String(e.cronograma.total_horas||'—'),valor_nuevo:String(totalHorasNuevo),motivo:m});
+  }
+  if(fechaEntregaNueva!==e.cronograma.fecha_entrega_estimada){
+    const m=getMotivoTxt('motivo-txt-fecha-entrega');
+    if(!m){alert('Ingresa el motivo del cambio en "Fecha de entrega".');return;}
+    cambios.push({campo:'Fecha de entrega',valor_anterior:e.cronograma.fecha_entrega_estimada||'—',valor_nuevo:fechaEntregaNueva,motivo:m});
+  }
 
   const fasesNuevas=fases.map((f,fi)=>{
     const ni=document.getElementById(`cron-fi-${fi}`)?.value||f.fecha_inicio;
     const nf=document.getElementById(`cron-ff-${fi}`)?.value||f.fecha_fin;
     const nd=parseInt(document.getElementById(`cron-fd-${fi}`)?.value)||f.duracion_dias;
-    if(ni!==f.fecha_inicio)cambios.push({campo:`Fase ${f.fase} — Inicio`,valor_anterior:f.fecha_inicio||'—',valor_nuevo:ni});
-    if(nf!==f.fecha_fin)cambios.push({campo:`Fase ${f.fase} — Fin`,valor_anterior:f.fecha_fin||'—',valor_nuevo:nf});
-    if(nd!==f.duracion_dias)cambios.push({campo:`Fase ${f.fase} — Días`,valor_anterior:String(f.duracion_dias),valor_nuevo:String(nd)});
+    if(ni!==f.fecha_inicio){
+      const m=getMotivoTxt(`motivo-txt-fi-${fi}`);
+      if(!m){alert(`Ingresa el motivo del cambio en la fecha de inicio de "${f.fase}".`);throw new Error('missing_motivo');}
+      cambios.push({campo:`Fase ${f.fase} — Inicio`,valor_anterior:f.fecha_inicio||'—',valor_nuevo:ni,motivo:m});
+    }
+    if(nf!==f.fecha_fin){
+      const m=getMotivoTxt(`motivo-txt-ff-${fi}`);
+      if(!m){alert(`Ingresa el motivo del cambio en la fecha de fin de "${f.fase}".`);throw new Error('missing_motivo');}
+      cambios.push({campo:`Fase ${f.fase} — Fin`,valor_anterior:f.fecha_fin||'—',valor_nuevo:nf,motivo:m});
+    }
+    if(nd!==f.duracion_dias){
+      const m=getMotivoTxt(`motivo-txt-fd-${fi}`);
+      if(!m){alert(`Ingresa el motivo del cambio en los días de "${f.fase}".`);throw new Error('missing_motivo');}
+      cambios.push({campo:`Fase ${f.fase} — Días`,valor_anterior:String(f.duracion_dias),valor_nuevo:String(nd),motivo:m});
+    }
     return{...f,fecha_inicio:ni,fecha_fin:nf,duracion_dias:nd};
   });
 
   if(!cambios.length){alert('No se detectaron cambios.');return;}
-
-  // Guardar con historial
-  e.cronograma={...e.cronograma,total_horas:totalHorasNuevo,fecha_entrega_estimada:fechaEntregaNueva,fases:fasesNuevas};
-  if(!e.historial_cambios)e.historial_cambios=[];
-  const fecha=new Date().toLocaleDateString('es',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
-  cambios.forEach(c=>e.historial_cambios.push({...c,motivo,fecha}));
-  arr[ersIdx]=e;
-  DB.saveErs(arr);
-  closeModal();
-  viewErs(ersIdx);
+  try{
+    e.cronograma={...e.cronograma,total_horas:totalHorasNuevo,fecha_entrega_estimada:fechaEntregaNueva,fases:fasesNuevas};
+    if(!e.historial_cambios)e.historial_cambios=[];
+    const fecha=new Date().toLocaleDateString('es',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    cambios.forEach(c=>e.historial_cambios.push({...c,fecha}));
+    arr[ersIdx]=e;
+    DB.saveErs(arr);
+    closeModal();
+    viewErs(ersIdx);
+  }catch(err){if(err.message!=='missing_motivo')throw err;}
 }
 
 function deleteErs(i){if(confirm('¿Eliminar esta ERS?')){const a=DB.ers();a.splice(i,1);DB.saveErs(a);closeModal();renderView(currentView);}}
@@ -1137,6 +1226,7 @@ function exportarDatos(){
     projects:DB.projects(),
     relevamientos:DB.relevamientos(),
     requerimientos:DB.requerimientos(),
+    archivados:DB.archivados(),
     ers:DB.ers()
   };
   const json=JSON.stringify(data,null,2);
@@ -1165,6 +1255,7 @@ function importarDatos(input){
       if(data.projects) DB.saveProjects(data.projects);
       if(data.relevamientos) DB.saveRelevamientos(data.relevamientos);
       if(data.requerimientos) DB.saveRequerimientos(data.requerimientos);
+      if(data.archivados) DB.saveArchivados(data.archivados);
       if(data.ers) DB.saveErs(data.ers);
       input.value='';
       alert('¡Datos importados correctamente!');
