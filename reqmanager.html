@@ -781,8 +781,8 @@ function openReqModal(req,idx){
       <button class="btn primary" onclick="saveReq(${isEdit?idx:-1})"><i class="ti ti-check"></i> Guardar</button>
     </div>`);
   if(isEdit){
-    bindAutoSave(['rq-titulo','rq-desc','rq-crit','rq-prio','rq-proyecto','rq-esfuerzo','rq-fecha-est','rq-comp','rq-dep'],
-      ()=>({titulo:v('rq-titulo'),descripcion:v('rq-desc'),criterios:v('rq-crit'),prioridad:v('rq-prio'),complejidad:v('rq-comp'),estado:v('rq-estado'),proyecto:v('rq-proyecto'),fecha:r.fecha,ia_generado:r.ia_generado,esfuerzo_horas:v('rq-esfuerzo'),fecha_estimada:v('rq-fecha-est'),dependencias:v('rq-dep'),casos_prueba:r.casos_prueba||[]}),
+    bindAutoSave(['rq-titulo','rq-desc','rq-crit','rq-prio','rq-proyecto','rq-esfuerzo','rq-fecha-est','rq-comp','rq-dep','rq-estado'],
+      ()=>({titulo:v('rq-titulo'),descripcion:v('rq-desc'),criterios:v('rq-crit'),prioridad:v('rq-prio'),complejidad:v('rq-comp'),estado:v('rq-estado'),proyecto:v('rq-proyecto'),fecha:r.fecha,ia_generado:r.ia_generado,esfuerzo_horas:v('rq-esfuerzo'),fecha_estimada:v('rq-fecha-est'),dependencias:v('rq-dep'),casos_prueba:r.casos_prueba||[],origen:r.origen||''}),
       (d)=>{if(!d.titulo)return;const a=DB.requerimientos();a[idx]=d;DB.saveRequerimientos(a);}
     );
   }
@@ -791,14 +791,17 @@ function openReqModal(req,idx){
 function selectStatus(el,estado){
   document.querySelectorAll('.status-btn').forEach(b=>b.classList.remove('active'));
   el.classList.add('active');
-  document.getElementById('rq-estado').value=estado;
+  const input=document.getElementById('rq-estado');
+  if(input)input.value=estado;
+  // Disparar autosave al cambiar estado
+  input?.dispatchEvent(new Event('change'));
 }
 
 function saveReq(idx){
   const r={titulo:v('rq-titulo'),descripcion:v('rq-desc'),criterios:v('rq-crit'),prioridad:v('rq-prio'),complejidad:v('rq-comp'),estado:v('rq-estado'),proyecto:v('rq-proyecto'),fecha:new Date().toISOString().split('T')[0],esfuerzo_horas:v('rq-esfuerzo'),fecha_estimada:v('rq-fecha-est'),dependencias:v('rq-dep')};
   if(!r.titulo){alert('El título es obligatorio');return;}
   const arr=DB.requerimientos();
-  if(idx>=0){r.ia_generado=arr[idx].ia_generado;r.casos_prueba=arr[idx].casos_prueba||[];}
+  if(idx>=0){r.ia_generado=arr[idx].ia_generado;r.casos_prueba=arr[idx].casos_prueba||[];r.origen=arr[idx].origen||'';}
   if(idx>=0)arr[idx]=r;else arr.push(r);
   DB.saveRequerimientos(arr);closeModal();renderView(currentView);
 }
