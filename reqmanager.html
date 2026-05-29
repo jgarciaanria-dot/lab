@@ -476,6 +476,7 @@ function viewRelevamiento(i){
   const r=DB.relevamientos()[i];
   showModal(`<h3>Relevamiento REL-${String(i+1).padStart(3,'0')}</h3>
     <div>
+      ${r.origen?`<div class="detail-row"><div class="detail-label" style="color:var(--color-text-info)"><i class="ti ti-link" style="font-size:11px"></i> Trazabilidad</div><div class="detail-value" style="font-size:12px;color:var(--color-text-secondary)">${escH(r.origen)}</div></div>`:''}
       ${r.proyecto?`<div class="detail-row"><div class="detail-label">Proyecto</div><div class="detail-value">${escH(r.proyecto)}</div></div>`:''}
       <div class="detail-row"><div class="detail-label">Problema</div><div class="detail-value">${escH(r.problema)}</div></div>
       ${r.flujo_actual?`<div class="detail-row"><div class="detail-label">Flujo actual</div><div class="detail-value">${escH(r.flujo_actual)}</div></div>`:''}
@@ -683,7 +684,9 @@ function openReqModal(req,idx){
     </div>
   </div>`:'';
 
+  const origenHtml=r.origen?`<div style="padding:8px 12px;background:var(--color-background-secondary);border-radius:6px;margin-bottom:12px;font-size:12px;color:var(--color-text-secondary);display:flex;align-items:center;gap:6px"><i class="ti ti-link" style="font-size:12px;color:var(--color-text-info)"></i>${escH(r.origen)}</div>`:'';
   showModal(`<h3>${isEdit?'Editar':'Nuevo'} requerimiento</h3>
+    ${origenHtml}
     <div class="form-row">
       <div class="field"><label>Proyecto</label><select id="rq-proyecto"><option value="">Sin proyecto</option>${projs.map(p=>`<option${p.nombre===r.proyecto?' selected':''}>${escH(p.nombre)}</option>`).join('')}</select></div>
       <div class="field"><label>Prioridad</label><select id="rq-prio">${PRIO.map(p=>`<option${p===r.prioridad?' selected':''}>${p}</option>`).join('')}</select></div>
@@ -855,6 +858,8 @@ Responde SOLO con este JSON, sin texto adicional ni backticks:
       return;
     }
     const reqs=DB.requerimientos();let added=0;
+    const ahora=new Date().toLocaleDateString('es',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    const relId=`REL-${String(relIdx+1).padStart(3,'0')}`;
     parsed.requerimientos.forEach(r=>{
       reqs.push({
         titulo:r.titulo,
@@ -868,6 +873,7 @@ Responde SOLO con este JSON, sin texto adicional ni backticks:
         estado:'Pendiente',
         proyecto:rel.proyecto,
         ia_generado:true,
+        origen:`Generado desde ${relId} · ${escH(rel.problema?.substring(0,60))}${rel.problema?.length>60?'…':''} · ${ahora}`,
         fecha:new Date().toISOString().split('T')[0]
       });
       added++;
@@ -1791,6 +1797,8 @@ Responde SOLO con este JSON, sin texto adicional ni backticks:
 function crearRelevamientoDesde(solIdx){
   const s=DB.solicitudes()[solIdx];
   const evalIA=s.evaluacion_ia;
+  const ahora=new Date().toLocaleDateString('es',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const solId=`SOL-${String(solIdx+1).padStart(3,'0')}`;
   const rel={
     problema:`${s.titulo}\n\n${s.descripcion}`,
     flujo_actual:'',
@@ -1798,9 +1806,9 @@ function crearRelevamientoDesde(solIdx){
     usuarios:`${s.area}${s.solicitante?' — '+s.solicitante:''}`,
     reglas:evalIA&&evalIA.puntos_clave?evalIA.puntos_clave.join('\n'):'',
     proyecto:s.proyecto,
-    fecha:new Date().toISOString().split('T')[0]
+    fecha:new Date().toISOString().split('T')[0],
+    origen:`Generado desde ${solId} · ${escH(s.titulo)} · ${ahora}`
   };
-  // Marcar solicitud como en relevamiento
   const arr=DB.solicitudes();
   arr[solIdx].estado='En relevamiento';
   DB.saveSolicitudes(arr);
