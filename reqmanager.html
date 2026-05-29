@@ -1790,7 +1790,16 @@ Responde SOLO con este JSON, sin texto adicional ni backticks:
 
 function crearRelevamientoDesde(solIdx){
   const s=DB.solicitudes()[solIdx];
-  const rel={problema:s.descripcion,flujo_actual:'',impacto:s.impacto==='Alto'?'Alto impacto en el negocio':s.impacto==='Medio'?'Impacto moderado':'Impacto bajo',usuarios:s.area,reglas:'',proyecto:s.proyecto,fecha:new Date().toISOString().split('T')[0]};
+  const evalIA=s.evaluacion_ia;
+  const rel={
+    problema:`${s.titulo}\n\n${s.descripcion}`,
+    flujo_actual:'',
+    impacto:`${s.impacto==='Alto'?'Alto':s.impacto==='Medio'?'Medio':'Bajo'} impacto. Urgencia: ${s.urgencia}.${evalIA?' Evaluación IA: '+evalIA.resumen:''}`,
+    usuarios:`${s.area}${s.solicitante?' — '+s.solicitante:''}`,
+    reglas:evalIA&&evalIA.puntos_clave?evalIA.puntos_clave.join('\n'):'',
+    proyecto:s.proyecto,
+    fecha:new Date().toISOString().split('T')[0]
+  };
   // Marcar solicitud como en relevamiento
   const arr=DB.solicitudes();
   arr[solIdx].estado='En relevamiento';
