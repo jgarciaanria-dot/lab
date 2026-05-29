@@ -661,8 +661,18 @@ function exportReqsPDF(){
 
 function openReqModal(req,idx){
   const isEdit=req!==undefined;
-  const r=req||{titulo:'',descripcion:'',criterios:'',prioridad:PRIO[1],estado:STATES[0],proyecto:'',fecha:new Date().toISOString().split('T')[0],esfuerzo_horas:'',fecha_estimada:''};
+  const r=req||{titulo:'',descripcion:'',criterios:'',prioridad:PRIO[1],complejidad:'Media',estado:STATES[0],proyecto:'',fecha:new Date().toISOString().split('T')[0],esfuerzo_horas:'',fecha_estimada:'',dependencias:'',casos_prueba:[]};
   const projs=DB.projects();
+  const COMP=['Baja','Media','Alta'];
+  const casosPruebaHtml=(r.casos_prueba&&r.casos_prueba.length)?`<div class="field"><label>Casos de prueba <span style="font-size:10px;color:var(--color-text-tertiary);font-weight:400">(generados por IA)</span></label>
+    <div style="border:0.5px solid var(--color-border-secondary);border-radius:6px;overflow:hidden">
+      ${r.casos_prueba.map((c,ci)=>`<div style="padding:8px 10px;${ci>0?'border-top:0.5px solid var(--color-border-tertiary)':''}">
+        <span class="badge ${c.tipo==='positivo'?'prod':c.tipo==='negativo'?'high':'analysis'}" style="font-size:10px;margin-bottom:4px;display:inline-block">${c.tipo}</span>
+        <div style="font-size:12px;color:var(--color-text-secondary);line-height:1.5">${escH(c.descripcion)}</div>
+      </div>`).join('')}
+    </div>
+  </div>`:'';
+
   showModal(`<h3>${isEdit?'Editar':'Nuevo'} requerimiento</h3>
     <div class="form-row">
       <div class="field"><label>Proyecto</label><select id="rq-proyecto"><option value="">Sin proyecto</option>${projs.map(p=>`<option${p.nombre===r.proyecto?' selected':''}>${escH(p.nombre)}</option>`).join('')}</select></div>
@@ -670,11 +680,16 @@ function openReqModal(req,idx){
     </div>
     <div class="field"><label>Título *</label><input id="rq-titulo" value="${escH(r.titulo)}" placeholder="Ej: El sistema debe permitir registrar llegada de buques"></div>
     <div class="field"><label>Descripción</label><textarea id="rq-desc">${escH(r.descripcion||'')}</textarea></div>
-    <div class="field"><label>Criterios de aceptación</label><textarea id="rq-crit" style="min-height:60px">${escH(r.criterios||'')}</textarea></div>
+    <div class="field"><label>Criterios de aceptación (Gherkin)</label><textarea id="rq-crit" style="min-height:90px;font-family:monospace;font-size:12px">${escH(r.criterios||'')}</textarea></div>
     <div class="form-row">
+      <div class="field"><label>Complejidad</label><select id="rq-comp">${COMP.map(c=>`<option${c===(r.complejidad||'Media')?' selected':''}>${c}</option>`).join('')}</select></div>
       <div class="field"><label>Esfuerzo estimado (horas)</label><input type="number" id="rq-esfuerzo" value="${r.esfuerzo_horas||''}" placeholder="Ej: 16" min="0"></div>
-      <div class="field"><label>Fecha estimada de entrega</label><input type="date" id="rq-fecha-est" value="${r.fecha_estimada||''}"></div>
     </div>
+    <div class="form-row">
+      <div class="field"><label>Fecha estimada de entrega</label><input type="date" id="rq-fecha-est" value="${r.fecha_estimada||''}"></div>
+      <div class="field"><label>Dependencias</label><input id="rq-dep" value="${escH(r.dependencias||'')}" placeholder="Ej: RF-02, RF-03"></div>
+    </div>
+    ${casosPruebaHtml}
     <div class="field">
       <label>Estado</label>
       <div class="status-flow">${STATES.map(s=>`<button class="status-btn${s===r.estado?' active':''}" onclick="selectStatus(this,'${s}')">${s}</button>`).join('')}</div>
@@ -686,8 +701,8 @@ function openReqModal(req,idx){
       <button class="btn primary" onclick="saveReq(${isEdit?idx:-1})"><i class="ti ti-check"></i> Guardar</button>
     </div>`);
   if(isEdit){
-    bindAutoSave(['rq-titulo','rq-desc','rq-crit','rq-prio','rq-proyecto','rq-esfuerzo','rq-fecha-est'],
-      ()=>({titulo:v('rq-titulo'),descripcion:v('rq-desc'),criterios:v('rq-crit'),prioridad:v('rq-prio'),estado:v('rq-estado'),proyecto:v('rq-proyecto'),fecha:r.fecha,ia_generado:r.ia_generado,esfuerzo_horas:v('rq-esfuerzo'),fecha_estimada:v('rq-fecha-est')}),
+    bindAutoSave(['rq-titulo','rq-desc','rq-crit','rq-prio','rq-proyecto','rq-esfuerzo','rq-fecha-est','rq-comp','rq-dep'],
+      ()=>({titulo:v('rq-titulo'),descripcion:v('rq-desc'),criterios:v('rq-crit'),prioridad:v('rq-prio'),complejidad:v('rq-comp'),estado:v('rq-estado'),proyecto:v('rq-proyecto'),fecha:r.fecha,ia_generado:r.ia_generado,esfuerzo_horas:v('rq-esfuerzo'),fecha_estimada:v('rq-fecha-est'),dependencias:v('rq-dep'),casos_prueba:r.casos_prueba||[]}),
       (d)=>{if(!d.titulo)return;const a=DB.requerimientos();a[idx]=d;DB.saveRequerimientos(a);}
     );
   }
@@ -700,10 +715,10 @@ function selectStatus(el,estado){
 }
 
 function saveReq(idx){
-  const r={titulo:v('rq-titulo'),descripcion:v('rq-desc'),criterios:v('rq-crit'),prioridad:v('rq-prio'),estado:v('rq-estado'),proyecto:v('rq-proyecto'),fecha:new Date().toISOString().split('T')[0],esfuerzo_horas:v('rq-esfuerzo'),fecha_estimada:v('rq-fecha-est')};
+  const r={titulo:v('rq-titulo'),descripcion:v('rq-desc'),criterios:v('rq-crit'),prioridad:v('rq-prio'),complejidad:v('rq-comp'),estado:v('rq-estado'),proyecto:v('rq-proyecto'),fecha:new Date().toISOString().split('T')[0],esfuerzo_horas:v('rq-esfuerzo'),fecha_estimada:v('rq-fecha-est'),dependencias:v('rq-dep')};
   if(!r.titulo){alert('El título es obligatorio');return;}
   const arr=DB.requerimientos();
-  if(idx>=0){r.ia_generado=arr[idx].ia_generado;}
+  if(idx>=0){r.ia_generado=arr[idx].ia_generado;r.casos_prueba=arr[idx].casos_prueba||[];}
   if(idx>=0)arr[idx]=r;else arr.push(r);
   DB.saveRequerimientos(arr);closeModal();renderView(currentView);
 }
@@ -765,17 +780,51 @@ async function generarReqsDesdeRelevamiento(rel,relIdx){
     <div class="ai-header"><i class="ti ti-sparkles"></i> Generando requerimientos funcionales con IA<span class="loading-dots"></span></div>
     <div class="ai-output" id="ai-stream">Analizando el relevamiento funcional...</div>
   </div></div>`;
-  const prompt=`Eres un analista de requerimientos experto. Analiza este relevamiento y genera requerimientos funcionales claros.
+
+  const prompt=`Eres un analista funcional senior experto en levantamiento de requerimientos de software. Analiza el siguiente relevamiento y genera requerimientos funcionales de alta calidad.
 
 RELEVAMIENTO:
-- Problema: ${rel.problema}
+- Problema / Necesidad: ${rel.problema}
 - Flujo actual: ${rel.flujo_actual||'No especificado'}
-- Impacto: ${rel.impacto||'No especificado'}
-- Usuarios: ${rel.usuarios||'No especificado'}
+- Impacto en el negocio: ${rel.impacto||'No especificado'}
+- Usuarios involucrados: ${rel.usuarios||'No especificado'}
 - Reglas de negocio: ${rel.reglas||'No especificadas'}
+- Proyecto: ${rel.proyecto||'No especificado'}
 
-Genera entre 3 y 6 requerimientos funcionales. Responde SOLO con este JSON, sin texto adicional ni backticks:
-{"requerimientos":[{"titulo":"Título corto","descripcion":"Qué debe hacer el sistema (el QUÉ, no el CÓMO)","prioridad":"Alta|Media|Baja","criterios":"Criterios de aceptación verificables"}]}`;
+REGLAS PARA GENERAR REQUERIMIENTOS:
+1. Genera entre 8 y 15 requerimientos funcionales según la complejidad del relevamiento.
+2. Cada requerimiento debe representar UNA SOLA capacidad funcional del sistema. NO generar épicas.
+3. El título debe ser corto y accionable (máximo 10 palabras).
+4. La descripción debe expresar QUÉ debe hacer el sistema, NO el CÓMO técnico.
+5. Los criterios de aceptación DEBEN estar en formato Gherkin estricto:
+   - Dado [contexto o precondición]
+   - Cuando [acción del usuario o evento]
+   - Entonces [resultado esperado verificable]
+   Puedes agregar múltiples escenarios si aplica (Dado/Cuando/Entonces adicionales).
+6. Asigna prioridad según impacto: Alta (crítico para el negocio), Media (importante), Baja (mejora).
+7. Incluye dependencias entre requerimientos si existen (por ID).
+8. Estima complejidad: Baja (1-8h), Media (8-24h), Alta (24h+).
+
+Responde SOLO con este JSON, sin texto adicional ni backticks:
+{
+  "requerimientos": [
+    {
+      "titulo": "Título corto y accionable",
+      "descripcion": "El sistema debe permitir/validar/registrar... [QUÉ, no CÓMO]",
+      "prioridad": "Alta|Media|Baja",
+      "complejidad": "Baja|Media|Alta",
+      "esfuerzo_horas": 8,
+      "dependencias": "RF-02, RF-03 o vacío si no tiene",
+      "criterios": "Dado [contexto]\\nCuando [acción]\\nEntonces [resultado]\\n\\nEscenario 2 (si aplica):\\nDado [contexto]\\nCuando [acción]\\nEntonces [resultado]",
+      "casos_prueba": [
+        {"tipo": "positivo", "descripcion": "Caso de prueba positivo verificable"},
+        {"tipo": "negativo", "descripcion": "Caso de prueba negativo o de error"},
+        {"tipo": "limite", "descripcion": "Caso de prueba de valor límite o borde"}
+      ]
+    }
+  ]
+}`;
+
   try{
     const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${getApiKey()}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})});
     const data=await res.json();
@@ -796,9 +845,27 @@ Genera entre 3 y 6 requerimientos funcionales. Responde SOLO con este JSON, sin 
       return;
     }
     const reqs=DB.requerimientos();let added=0;
-    parsed.requerimientos.forEach(r=>{reqs.push({titulo:r.titulo,descripcion:r.descripcion,prioridad:r.prioridad,criterios:r.criterios,estado:'Pendiente',proyecto:rel.proyecto,ia_generado:true,fecha:new Date().toISOString().split('T')[0]});added++;});
+    parsed.requerimientos.forEach(r=>{
+      reqs.push({
+        titulo:r.titulo,
+        descripcion:r.descripcion,
+        prioridad:r.prioridad,
+        complejidad:r.complejidad||'Media',
+        esfuerzo_horas:r.esfuerzo_horas||'',
+        dependencias:r.dependencias||'',
+        criterios:r.criterios,
+        casos_prueba:r.casos_prueba||[],
+        estado:'Pendiente',
+        proyecto:rel.proyecto,
+        ia_generado:true,
+        fecha:new Date().toISOString().split('T')[0]
+      });
+      added++;
+    });
     DB.saveRequerimientos(reqs);
-    const relevs=DB.relevamientos();if(relevs[relIdx])relevs[relIdx].reqs_generados=added;DB.saveRelevamientos(relevs);
+    const relevs=DB.relevamientos();
+    if(relevs[relIdx])relevs[relIdx].reqs_generados=added;
+    DB.saveRelevamientos(relevs);
     renderView('requerimientos');
   }catch(e){document.getElementById('ai-stream').textContent='Error de red al conectar con la IA.\n\nDetalle: '+e.message;}
 }
@@ -848,7 +915,7 @@ async function generarERS(){
   const reqs=DB.requerimientos().filter(r=>r.proyecto===proyecto);
   const proj=DB.projects().find(p=>p.nombre===proyecto)||{};
 
-  const prompt=`Eres un analista de sistemas experto. Genera una Especificación de Requerimientos de Software (ERS) formal y completa para el siguiente proyecto.
+  const prompt=`Eres un analista de sistemas senior experto en documentación de software. Genera una Especificación de Requerimientos de Software (ERS) formal, completa y de alta calidad.
 
 DATOS DEL PROYECTO:
 - Nombre: ${proyecto}
@@ -861,18 +928,27 @@ RELEVAMIENTOS (${relevs.length}):
 ${relevs.map((r,i)=>`${i+1}. Problema: ${r.problema}. Flujo actual: ${r.flujo_actual||'N/A'}. Impacto: ${r.impacto||'N/A'}. Usuarios: ${r.usuarios||'N/A'}. Reglas: ${r.reglas||'N/A'}`).join('\n')||'No hay relevamientos registrados.'}
 
 REQUERIMIENTOS FUNCIONALES (${reqs.length}):
-${reqs.map((r,i)=>`RF-${i+1}: ${r.titulo}. ${r.descripcion||''}. Criterios: ${r.criterios||'N/A'}. Prioridad: ${r.prioridad}. Esfuerzo estimado: ${r.esfuerzo_horas?r.esfuerzo_horas+' horas':'No definido'}. Fecha estimada: ${r.fecha_estimada||'No definida'}`).join('\n')||'No hay requerimientos registrados.'}
+${reqs.map((r,i)=>`RF-${String(i+1).padStart(2,'0')}: ${r.titulo}. ${r.descripcion||''}. Criterios: ${r.criterios||'N/A'}. Prioridad: ${r.prioridad}. Complejidad: ${r.complejidad||'Media'}. Esfuerzo: ${r.esfuerzo_horas?r.esfuerzo_horas+' horas':'No definido'}. Dependencias: ${r.dependencias||'Ninguna'}`).join('\n')||'No hay requerimientos registrados.'}
 
-Genera la ERS completa con cronograma. Responde SOLO con este JSON, sin texto adicional ni backticks:
+INSTRUCCIONES:
+- Los criterios de aceptación en reqs_funcionales deben estar en formato Gherkin (Dado/Cuando/Entonces).
+- Identifica riesgos reales del proyecto basados en los relevamientos.
+- La matriz de trazabilidad debe vincular cada RF con los relevamientos que lo originaron.
+- "fuera_alcance" debe listar explícitamente qué NO cubre el sistema.
+
+Responde SOLO con este JSON, sin texto adicional ni backticks:
 {
   "objetivo": "Objetivo del sistema en 1-2 oraciones",
   "alcance": "Descripción del alcance del sistema",
-  "stakeholders": ["Lista de stakeholders identificados"],
-  "reqs_funcionales": [{"id":"RF-01","titulo":"titulo","descripcion":"descripcion completa","prioridad":"Alta|Media|Baja","criterios":"criterios de aceptación","esfuerzo_horas":8}],
+  "fuera_alcance": ["Elemento que NO está en el alcance 1", "Elemento 2"],
+  "stakeholders": ["Stakeholder 1 con su rol", "Stakeholder 2"],
+  "reqs_funcionales": [{"id":"RF-01","titulo":"titulo","descripcion":"descripcion completa","prioridad":"Alta|Media|Baja","complejidad":"Baja|Media|Alta","criterios":"Dado [contexto]\\nCuando [acción]\\nEntonces [resultado]","esfuerzo_horas":8}],
   "reqs_no_funcionales": [{"categoria":"Seguridad|Desempeño|Usabilidad|Confiabilidad|Escalabilidad","descripcion":"descripcion"}],
   "reglas_negocio": ["Regla de negocio 1", "Regla 2"],
+  "riesgos": [{"descripcion":"Descripción del riesgo","probabilidad":"Alta|Media|Baja","impacto":"Alto|Medio|Bajo","mitigacion":"Estrategia de mitigación"}],
   "restricciones": ["Restricción técnica o de negocio"],
   "supuestos": ["Supuesto 1"],
+  "matriz_trazabilidad": [{"req_id":"RF-01","titulo_req":"titulo corto","relevamiento_origen":"REL-001 o descripción breve","estado":"Pendiente"}],
   "cronograma": {
     "total_horas": 0,
     "fecha_inicio": "YYYY-MM-DD",
@@ -907,7 +983,7 @@ Genera la ERS completa con cronograma. Responde SOLO con este JSON, sin texto ad
       return;
     }
     const ersArr=DB.ers();
-    const newErs={proyecto,objetivo:parsed.objetivo,alcance:parsed.alcance,stakeholders:parsed.stakeholders||[],reqs_funcionales:parsed.reqs_funcionales||[],reqs_no_funcionales:parsed.reqs_no_funcionales||[],reglas_negocio:parsed.reglas_negocio||[],restricciones:parsed.restricciones||[],supuestos:parsed.supuestos||[],cronograma:parsed.cronograma||null,total_reqs:(parsed.reqs_funcionales||[]).length,fecha:new Date().toISOString().split('T')[0]};
+    const newErs={proyecto,objetivo:parsed.objetivo,alcance:parsed.alcance,fuera_alcance:parsed.fuera_alcance||[],stakeholders:parsed.stakeholders||[],reqs_funcionales:parsed.reqs_funcionales||[],reqs_no_funcionales:parsed.reqs_no_funcionales||[],reglas_negocio:parsed.reglas_negocio||[],riesgos:parsed.riesgos||[],restricciones:parsed.restricciones||[],supuestos:parsed.supuestos||[],matriz_trazabilidad:parsed.matriz_trazabilidad||[],cronograma:parsed.cronograma||null,total_reqs:(parsed.reqs_funcionales||[]).length,fecha:new Date().toISOString().split('T')[0]};
     ersArr.push(newErs);
     DB.saveErs(ersArr);
     renderView('especificacion');
@@ -966,6 +1042,7 @@ function viewErs(i){
     <div class="ers-section"><h4>Objetivo del sistema</h4><p>${escH(e.objetivo)}</p></div>
     <div class="ers-section"><h4>Alcance</h4><p>${escH(e.alcance)}</p></div>
     ${e.stakeholders?.length?`<div class="ers-section"><h4>Stakeholders</h4><ul>${e.stakeholders.map(s=>`<li>${escH(s)}</li>`).join('')}</ul></div>`:''}
+    ${e.fuera_alcance?.length?`<div class="ers-section"><h4>Fuera de alcance</h4><ul>${e.fuera_alcance.map(f=>`<li>${escH(f)}</li>`).join('')}</ul></div>`:''}
     ${cronHtml}
     <div class="ers-section"><h4>Requerimientos funcionales</h4>
       ${e.reqs_funcionales?.map(r=>`<div class="ers-req-item">
@@ -981,6 +1058,38 @@ function viewErs(i){
     ${e.reglas_negocio?.length?`<div class="ers-section"><h4>Reglas de negocio</h4><ul>${e.reglas_negocio.map(r=>`<li>${escH(r)}</li>`).join('')}</ul></div>`:''}
     ${e.restricciones?.length?`<div class="ers-section"><h4>Restricciones</h4><ul>${e.restricciones.map(r=>`<li>${escH(r)}</li>`).join('')}</ul></div>`:''}
     ${e.supuestos?.length?`<div class="ers-section"><h4>Supuestos</h4><ul>${e.supuestos.map(s=>`<li>${escH(s)}</li>`).join('')}</ul></div>`:''}
+    ${e.riesgos?.length?`<div class="ers-section"><h4>Riesgos identificados</h4>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr>
+          <th style="text-align:left;padding:6px 8px;background:var(--color-background-secondary);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-tertiary)">Riesgo</th>
+          <th style="text-align:center;padding:6px 8px;background:var(--color-background-secondary);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-tertiary)">Prob.</th>
+          <th style="text-align:center;padding:6px 8px;background:var(--color-background-secondary);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-tertiary)">Impacto</th>
+          <th style="text-align:left;padding:6px 8px;background:var(--color-background-secondary);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-tertiary)">Mitigación</th>
+        </tr></thead>
+        <tbody>${e.riesgos.map(r=>`<tr>
+          <td style="padding:7px 8px;border-bottom:0.5px solid var(--color-border-tertiary)">${escH(r.descripcion)}</td>
+          <td style="padding:7px 8px;border-bottom:0.5px solid var(--color-border-tertiary);text-align:center"><span class="badge ${r.probabilidad==='Alta'?'high':r.probabilidad==='Media'?'medium':'low'}">${r.probabilidad}</span></td>
+          <td style="padding:7px 8px;border-bottom:0.5px solid var(--color-border-tertiary);text-align:center"><span class="badge ${r.impacto==='Alto'?'high':r.impacto==='Medio'?'medium':'low'}">${r.impacto}</span></td>
+          <td style="padding:7px 8px;border-bottom:0.5px solid var(--color-border-tertiary);font-size:12px;color:var(--color-text-secondary)">${escH(r.mitigacion)}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>`:''}
+    ${e.matriz_trazabilidad?.length?`<div class="ers-section"><h4>Matriz de trazabilidad</h4>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr>
+          <th style="text-align:left;padding:6px 8px;background:var(--color-background-secondary);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-tertiary)">ID</th>
+          <th style="text-align:left;padding:6px 8px;background:var(--color-background-secondary);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-tertiary)">Requerimiento</th>
+          <th style="text-align:left;padding:6px 8px;background:var(--color-background-secondary);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-tertiary)">Origen</th>
+          <th style="text-align:left;padding:6px 8px;background:var(--color-background-secondary);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--color-text-tertiary)">Estado</th>
+        </tr></thead>
+        <tbody>${e.matriz_trazabilidad.map(m=>`<tr>
+          <td style="padding:7px 8px;border-bottom:0.5px solid var(--color-border-tertiary);font-weight:600;font-size:11px">${escH(m.req_id)}</td>
+          <td style="padding:7px 8px;border-bottom:0.5px solid var(--color-border-tertiary)">${escH(m.titulo_req)}</td>
+          <td style="padding:7px 8px;border-bottom:0.5px solid var(--color-border-tertiary);color:var(--color-text-secondary);font-size:12px">${escH(m.relevamiento_origen)}</td>
+          <td style="padding:7px 8px;border-bottom:0.5px solid var(--color-border-tertiary)"><span class="badge ${STATE_KEY[STATES.indexOf(m.estado)]||'pending'}">${escH(m.estado)}</span></td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>`:''}
     ${historialHtml}
     <div style="display:flex;justify-content:flex-end;margin-top:8px">
       <button class="btn" onclick="closeModal()">Cerrar</button>
@@ -1144,6 +1253,7 @@ function exportErsPDF(i){
   <h3>Objetivo del sistema</h3><p>${escH(e.objetivo)}</p>
   <h3>Alcance</h3><p>${escH(e.alcance)}</p>
   ${e.stakeholders?.length?`<h3>Stakeholders</h3><ul>${e.stakeholders.map(s=>`<li>${escH(s)}</li>`).join('')}</ul>`:''}
+  ${e.fuera_alcance?.length?`<h3>Fuera de alcance</h3><ul>${e.fuera_alcance.map(f=>`<li>${escH(f)}</li>`).join('')}</ul>`:''}
   ${cronPDF}
   <h3>Requerimientos funcionales</h3>
   ${e.reqs_funcionales?.map(r=>`<div class="req-item">
@@ -1156,6 +1266,36 @@ function exportErsPDF(i){
   ${e.reglas_negocio?.length?`<h3>Reglas de negocio</h3><ul>${e.reglas_negocio.map(r=>`<li>${escH(r)}</li>`).join('')}</ul>`:''}
   ${e.restricciones?.length?`<h3>Restricciones</h3><ul>${e.restricciones.map(r=>`<li>${escH(r)}</li>`).join('')}</ul>`:''}
   ${e.supuestos?.length?`<h3>Supuestos</h3><ul>${e.supuestos.map(s=>`<li>${escH(s)}</li>`).join('')}</ul>`:''}
+  ${e.riesgos?.length?`<h3>Riesgos identificados</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead><tr style="background:#f5f5f4">
+      <th style="text-align:left;padding:7px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888;border-bottom:1px solid #ddd">Riesgo</th>
+      <th style="text-align:center;padding:7px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888;border-bottom:1px solid #ddd">Prob.</th>
+      <th style="text-align:center;padding:7px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888;border-bottom:1px solid #ddd">Impacto</th>
+      <th style="text-align:left;padding:7px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888;border-bottom:1px solid #ddd">Mitigación</th>
+    </tr></thead>
+    <tbody>${e.riesgos.map(r=>`<tr>
+      <td style="padding:7px 10px;border-bottom:0.5px solid #eee">${escH(r.descripcion)}</td>
+      <td style="padding:7px 10px;border-bottom:0.5px solid #eee;text-align:center">${escH(r.probabilidad)}</td>
+      <td style="padding:7px 10px;border-bottom:0.5px solid #eee;text-align:center">${escH(r.impacto)}</td>
+      <td style="padding:7px 10px;border-bottom:0.5px solid #eee;color:#555">${escH(r.mitigacion)}</td>
+    </tr>`).join('')}</tbody>
+  </table>`:''}
+  ${e.matriz_trazabilidad?.length?`<h3>Matriz de trazabilidad</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead><tr style="background:#f5f5f4">
+      <th style="text-align:left;padding:7px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888;border-bottom:1px solid #ddd">ID</th>
+      <th style="text-align:left;padding:7px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888;border-bottom:1px solid #ddd">Requerimiento</th>
+      <th style="text-align:left;padding:7px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888;border-bottom:1px solid #ddd">Origen</th>
+      <th style="text-align:left;padding:7px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888;border-bottom:1px solid #ddd">Estado</th>
+    </tr></thead>
+    <tbody>${e.matriz_trazabilidad.map(m=>`<tr>
+      <td style="padding:7px 10px;border-bottom:0.5px solid #eee;font-weight:700">${escH(m.req_id)}</td>
+      <td style="padding:7px 10px;border-bottom:0.5px solid #eee">${escH(m.titulo_req)}</td>
+      <td style="padding:7px 10px;border-bottom:0.5px solid #eee;color:#555">${escH(m.relevamiento_origen)}</td>
+      <td style="padding:7px 10px;border-bottom:0.5px solid #eee">${escH(m.estado)}</td>
+    </tr>`).join('')}</tbody>
+  </table>`:''}
   ${e.historial_cambios?.length?`<h3>Historial de cambios</h3>
   <table style="width:100%;border-collapse:collapse;font-size:12px">
     <thead><tr style="background:#f5f5f4">
