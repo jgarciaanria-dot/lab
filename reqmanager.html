@@ -1950,8 +1950,9 @@ async function generarResumenProyecto(i){
   const ultimaErs=ers[ers.length-1]||null;
   const porEstado=STATES.map(s=>({estado:s,total:reqs.filter(r=>r.estado===s).length}));
   const totalReqs=reqs.length;
-  const enProduccion=reqs.filter(r=>r.estado==='Produccion').length;
-  const avance=totalReqs?Math.round(enProduccion/totalReqs*100):0;
+  // Avance ponderado por fase
+  const pesoFase={'Pendiente':0,'Análisis':20,'Desarrollo':40,'QA':60,'UAT':80,'Producción':100};
+  const avance=totalReqs?Math.round(reqs.reduce(function(sum,r){return sum+(pesoFase[r.estado]||0);},0)/totalReqs):0;
   const cambiosCron=ultimaErs&&ultimaErs.historial_cambios?ultimaErs.historial_cambios.slice(-3):[];
 
   showModal('<h3><i class="ti ti-sparkles" style="color:var(--color-text-info)"></i> Resumen ejecutivo — '+escH(p.nombre)+'</h3>'
@@ -1973,17 +1974,20 @@ async function generarResumenProyecto(i){
     +'PROYECTO: '+p.nombre+' | Área: '+(p.area||'—')+' | Responsable: '+(p.responsable||'—')+' | Estado: '+p.estado+'\n\n'
     +'SOLICITUDES ('+sols.length+'): '+solicitudesStr+'\n\n'
     +'RELEVAMIENTOS ('+relevs.length+'): '+relevamientosStr+'\n\n'
-    +'REQUERIMIENTOS ('+totalReqs+'): '+estadosStr+' | Avance: '+avance+'%\n\n'
+    +'REQUERIMIENTOS ('+totalReqs+'): '+estadosStr+'\n'
+    +'Avance ponderado: '+avance+'% (calculado según fase: Pendiente=0%, Análisis=20%, Desarrollo=40%, QA=60%, UAT=80%, Producción=100%)\n\n'
     +'ERS: '+ersStr+'\n\n'
     +'CAMBIOS CRONOGRAMA: '+cambiosStr+'\n\n'
     +'RIESGOS: '+riesgosStr+'\n\n'
+    +'IMPORTANTE: El avance del '+avance+'% es correcto y refleja el progreso real ponderado por fase. No lo marques como inconsistencia. '
+    +'Si hay RFs en Desarrollo o UAT, eso ES progreso real.\n\n'
     +'Responde SOLO con JSON (sin backticks) con estas claves: '
     +'estado_general (string: En tiempo/En riesgo/Retrasado/Completado), '
     +'semaforo (string: verde/amarillo/rojo), '
     +'resumen_ejecutivo (string: 2-3 oraciones), '
     +'logros_recientes (array de strings), '
     +'riesgos_activos (array de strings), '
-    +'alertas (array de strings, vacio si no hay), '
+    +'alertas (array de strings, vacio si no hay alertas reales), '
     +'proximos_pasos (array de strings), '
     +'recomendacion (string: 1-2 oraciones).';
 
