@@ -325,7 +325,7 @@ function renderProjects(){
       <td><span class="badge ${STATE_KEY[STATES.indexOf(p.estado)]||'pending'}">${p.estado}</span></td>
       <td><span class="badge ${PRIO_KEY[PRIO.indexOf(p.prioridad)]||'medium'}">${p.prioridad}</span></td>
       <td style="font-size:12px;color:var(--color-text-secondary)">${p.fecha||'-'}</td>
-      <td><button class="btn sm" onclick="editProject(${i})"><i class="ti ti-edit"></i></button></td>
+      <td><button class="btn sm" onclick="editProject(${i})"><i class="ti ti-edit"></i></button> <button class="btn sm" onclick="abrirResumenProyecto(${i})" title="Resumen ejecutivo IA" style="color:var(--color-text-info);border-color:rgba(24,95,165,0.3)"><i class="ti ti-sparkles"></i></button></td>
     </tr>`).join('')}</tbody>
   </table></div>`;
 }
@@ -763,13 +763,22 @@ function openReqModal(req,idx){
     <div class="field"><label>Criterios de aceptación (Gherkin)</label><textarea id="rq-crit" style="min-height:90px;font-family:monospace;font-size:12px">${escH(r.criterios||'')}</textarea></div>
     <div class="form-row">
       <div class="field"><label>Complejidad</label><select id="rq-comp">${COMP.map(c=>`<option${c===(r.complejidad||'Media')?' selected':''}>${c}</option>`).join('')}</select></div>
-      <div class="field"><label>Esfuerzo estimado (horas)</label><input type="number" id="rq-esfuerzo" value="${r.esfuerzo_horas||''}" placeholder="Ej: 16" min="0"></div>
+      <div class="field">
+        <label>Esfuerzo estimado (horas)</label>
+        <input type="number" id="rq-esfuerzo" value="${r.esfuerzo_horas||''}" placeholder="Ej: 16" min="0" onchange="mostrarMotivoReq('motivo-esfuerzo',this.value!='${r.esfuerzo_horas||''}')">
+        <div id="motivo-esfuerzo" style="display:none;margin-top:6px"><textarea id="motivo-txt-esfuerzo" placeholder="Motivo del cambio en horas..." style="min-height:50px;font-size:12px"></textarea></div>
+      </div>
     </div>
     <div class="form-row">
-      <div class="field"><label>Fecha estimada de entrega</label><input type="date" id="rq-fecha-est" value="${r.fecha_estimada||''}"></div>
+      <div class="field">
+        <label>Fecha estimada de entrega</label>
+        <input type="date" id="rq-fecha-est" value="${r.fecha_estimada||''}" onchange="mostrarMotivoReq('motivo-fecha-est',this.value!='${r.fecha_estimada||''}')">
+        <div id="motivo-fecha-est" style="display:none;margin-top:6px"><textarea id="motivo-txt-fecha-est" placeholder="Motivo del cambio en fecha..." style="min-height:50px;font-size:12px"></textarea></div>
+      </div>
       <div class="field"><label>Dependencias</label><input id="rq-dep" value="${escH(r.dependencias||'')}" placeholder="Ej: RF-02, RF-03"></div>
     </div>
     ${casosPruebaHtml}
+    ${isEdit&&r.historial_cambios&&r.historial_cambios.length?`<div class="field"><label>Historial de cambios</label><div style="border:0.5px solid var(--color-border-secondary);border-radius:6px;overflow:hidden">${r.historial_cambios.map((c,ci)=>`<div style="padding:8px 10px;${ci>0?'border-top:0.5px solid var(--color-border-tertiary)':''}"><div style="display:flex;justify-content:space-between;margin-bottom:2px"><span style="font-size:11px;font-weight:600">${escH(c.campo)}: <span style="text-decoration:line-through;color:var(--color-text-tertiary)">${escH(c.valor_anterior)}</span> → ${escH(c.valor_nuevo)}</span><span style="font-size:10px;color:var(--color-text-tertiary)">${c.fecha}</span></div><div style="font-size:11px;color:var(--color-text-secondary)">${escH(c.motivo)}</div></div>`).join('')}</div></div>`:''}
     <div class="field">
       <label>Estado</label>
       <div class="status-flow">${STATES.map(s=>`<button class="status-btn${s===r.estado?' active':''}" onclick="selectStatus(this,'${s}')">${s}</button>`).join('')}</div>
@@ -782,10 +791,15 @@ function openReqModal(req,idx){
     </div>`);
   if(isEdit){
     bindAutoSave(['rq-titulo','rq-desc','rq-crit','rq-prio','rq-proyecto','rq-esfuerzo','rq-fecha-est','rq-comp','rq-dep','rq-estado'],
-      ()=>({titulo:v('rq-titulo'),descripcion:v('rq-desc'),criterios:v('rq-crit'),prioridad:v('rq-prio'),complejidad:v('rq-comp'),estado:v('rq-estado'),proyecto:v('rq-proyecto'),fecha:r.fecha,ia_generado:r.ia_generado,esfuerzo_horas:v('rq-esfuerzo'),fecha_estimada:v('rq-fecha-est'),dependencias:v('rq-dep'),casos_prueba:r.casos_prueba||[],origen:r.origen||''}),
+      ()=>({titulo:v('rq-titulo'),descripcion:v('rq-desc'),criterios:v('rq-crit'),prioridad:v('rq-prio'),complejidad:v('rq-comp'),estado:v('rq-estado'),proyecto:v('rq-proyecto'),fecha:r.fecha,ia_generado:r.ia_generado,esfuerzo_horas:v('rq-esfuerzo'),fecha_estimada:v('rq-fecha-est'),dependencias:v('rq-dep'),casos_prueba:r.casos_prueba||[],origen:r.origen||'',historial_cambios:r.historial_cambios||[]}),
       (d)=>{if(!d.titulo)return;const a=DB.requerimientos();a[idx]=d;DB.saveRequerimientos(a);}
     );
   }
+}
+
+function mostrarMotivoReq(id,show){
+  const el=document.getElementById(id);
+  if(el)el.style.display=show?'block':'none';
 }
 
 function selectStatus(el,estado){
@@ -801,8 +815,28 @@ function saveReq(idx){
   const r={titulo:v('rq-titulo'),descripcion:v('rq-desc'),criterios:v('rq-crit'),prioridad:v('rq-prio'),complejidad:v('rq-comp'),estado:v('rq-estado'),proyecto:v('rq-proyecto'),fecha:new Date().toISOString().split('T')[0],esfuerzo_horas:v('rq-esfuerzo'),fecha_estimada:v('rq-fecha-est'),dependencias:v('rq-dep')};
   if(!r.titulo){alert('El título es obligatorio');return;}
   const arr=DB.requerimientos();
-  if(idx>=0){r.ia_generado=arr[idx].ia_generado;r.casos_prueba=arr[idx].casos_prueba||[];r.origen=arr[idx].origen||'';}
-  if(idx>=0)arr[idx]=r;else arr.push(r);
+  if(idx>=0){
+    const prev=arr[idx];
+    r.ia_generado=prev.ia_generado;
+    r.casos_prueba=prev.casos_prueba||[];
+    r.origen=prev.origen||'';
+    r.historial_cambios=prev.historial_cambios||[];
+    const fecha=new Date().toLocaleDateString('es',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    if(r.esfuerzo_horas!==(prev.esfuerzo_horas||'')){
+      const m=(document.getElementById('motivo-txt-esfuerzo')?.value||'').trim();
+      if(!m&&r.esfuerzo_horas){alert('Ingresa el motivo del cambio en horas estimadas.');return;}
+      if(m)r.historial_cambios.push({campo:'Esfuerzo estimado',valor_anterior:String(prev.esfuerzo_horas||'—'),valor_nuevo:r.esfuerzo_horas,motivo:m,fecha});
+    }
+    if(r.fecha_estimada!==(prev.fecha_estimada||'')){
+      const m=(document.getElementById('motivo-txt-fecha-est')?.value||'').trim();
+      if(!m&&r.fecha_estimada){alert('Ingresa el motivo del cambio en fecha estimada.');return;}
+      if(m)r.historial_cambios.push({campo:'Fecha estimada',valor_anterior:prev.fecha_estimada||'—',valor_nuevo:r.fecha_estimada,motivo:m,fecha});
+    }
+    if(r.estado!==prev.estado){
+      r.historial_cambios.push({campo:'Estado',valor_anterior:prev.estado,valor_nuevo:r.estado,motivo:'Cambio de estado',fecha});
+    }
+    arr[idx]=r;
+  } else arr.push(r);
   DB.saveRequerimientos(arr);closeModal();renderView(currentView);
 }
 function editReq(i){openReqModal(DB.requerimientos()[i],i);}
@@ -1884,6 +1918,160 @@ function crearRelevamientoDesde(solIdx){
   DB.saveSolicitudes(arr);
   navigate('relevamientos');
   openRelevamientoModal(rel,-1);
+}
+
+/* ── RESUMEN EJECUTIVO ── */
+function abrirResumenProyecto(i){
+  const p=DB.projects()[i];
+  const nSols=DB.solicitudes().filter(s=>s.proyecto===p.nombre).length;
+  const nRels=DB.relevamientos().filter(r=>r.proyecto===p.nombre).length;
+  const nReqs=DB.requerimientos().filter(r=>r.proyecto===p.nombre).length;
+  const nErs=DB.ers().filter(e=>e.proyecto===p.nombre).length;
+  showModal('<h3><i class="ti ti-sparkles" style="color:var(--color-text-info)"></i> Resumen ejecutivo — '+escH(p.nombre)+'</h3>'
+    +'<p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:16px;line-height:1.6">La IA leerá toda la información del proyecto para generar un resumen ejecutivo listo para reunión.</p>'
+    +'<div style="background:var(--color-background-secondary);border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;color:var(--color-text-secondary)">'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    +'<div><b>Solicitudes:</b> '+nSols+'</div><div><b>Relevamientos:</b> '+nRels+'</div>'
+    +'<div><b>Requerimientos:</b> '+nReqs+'</div><div><b>ERS generadas:</b> '+nErs+'</div>'
+    +'</div></div>'
+    +'<div style="display:flex;justify-content:flex-end;gap:8px">'
+    +'<button class="btn" onclick="closeModal()">Cancelar</button>'
+    +'<button class="btn primary" onclick="generarResumenProyecto('+i+')"><i class="ti ti-sparkles"></i> Generar resumen</button>'
+    +'</div>');
+}
+
+async function generarResumenProyecto(i){
+  if(!checkApiKey())return;
+  const p=DB.projects()[i];
+  const sols=DB.solicitudes().filter(s=>s.proyecto===p.nombre);
+  const relevs=DB.relevamientos().filter(r=>r.proyecto===p.nombre);
+  const reqs=DB.requerimientos().filter(r=>r.proyecto===p.nombre);
+  const ers=DB.ers().filter(e=>e.proyecto===p.nombre);
+  const ultimaErs=ers[ers.length-1]||null;
+  const porEstado=STATES.map(s=>({estado:s,total:reqs.filter(r=>r.estado===s).length}));
+  const totalReqs=reqs.length;
+  const enProduccion=reqs.filter(r=>r.estado==='Produccion').length;
+  const avance=totalReqs?Math.round(enProduccion/totalReqs*100):0;
+  const cambiosCron=ultimaErs&&ultimaErs.historial_cambios?ultimaErs.historial_cambios.slice(-3):[];
+
+  showModal('<h3><i class="ti ti-sparkles" style="color:var(--color-text-info)"></i> Resumen ejecutivo — '+escH(p.nombre)+'</h3>'
+    +'<div class="ai-box"><div class="ai-header"><i class="ti ti-sparkles"></i> Generando resumen<span class="loading-dots"></span></div>'
+    +'<div class="ai-output" id="resumen-output" style="min-height:100px">Analizando datos del proyecto...</div></div>'
+    +'<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">'
+    +'<button class="btn" onclick="closeModal()">Cerrar</button>'
+    +'<button class="btn" id="btn-export-resumen" style="display:none" onclick="exportarResumenPDF()"><i class="ti ti-file-export"></i> Exportar PDF</button>'
+    +'</div>');
+
+  const solicitudesStr=sols.map(s=>'- '+s.titulo+' ['+s.estado+'] Urgencia:'+s.urgencia).join('\n')||'Ninguna';
+  const relevamientosStr=relevs.map(r=>'- '+(r.problema||'').substring(0,80)).join('\n')||'Ninguno';
+  const estadosStr=porEstado.map(e=>e.estado+': '+e.total).join(' | ');
+  const cambiosStr=cambiosCron.map(c=>'- '+c.campo+': '+c.valor_anterior+' → '+c.valor_nuevo+' ('+c.motivo+')').join('\n')||'Sin cambios recientes';
+  const riesgosStr=ultimaErs&&ultimaErs.riesgos?ultimaErs.riesgos.map(r=>'- '+r.descripcion+' [Prob:'+r.probabilidad+']').join('\n'):'Sin riesgos documentados';
+  const ersStr=ultimaErs?(ultimaErs.total_reqs+' reqs. Entrega: '+(ultimaErs.cronograma?ultimaErs.cronograma.fecha_entrega_estimada:'N/D')+'. Horas: '+(ultimaErs.cronograma?ultimaErs.cronograma.total_horas:'N/D')):'Sin ERS';
+
+  const prompt='Eres un analista de proyectos senior. Genera un resumen ejecutivo para reunión de seguimiento.\n\n'
+    +'PROYECTO: '+p.nombre+' | Área: '+(p.area||'—')+' | Responsable: '+(p.responsable||'—')+' | Estado: '+p.estado+'\n\n'
+    +'SOLICITUDES ('+sols.length+'): '+solicitudesStr+'\n\n'
+    +'RELEVAMIENTOS ('+relevs.length+'): '+relevamientosStr+'\n\n'
+    +'REQUERIMIENTOS ('+totalReqs+'): '+estadosStr+' | Avance: '+avance+'%\n\n'
+    +'ERS: '+ersStr+'\n\n'
+    +'CAMBIOS CRONOGRAMA: '+cambiosStr+'\n\n'
+    +'RIESGOS: '+riesgosStr+'\n\n'
+    +'Responde SOLO con JSON (sin backticks) con estas claves: '
+    +'estado_general (string: En tiempo/En riesgo/Retrasado/Completado), '
+    +'semaforo (string: verde/amarillo/rojo), '
+    +'resumen_ejecutivo (string: 2-3 oraciones), '
+    +'logros_recientes (array de strings), '
+    +'riesgos_activos (array de strings), '
+    +'alertas (array de strings, vacio si no hay), '
+    +'proximos_pasos (array de strings), '
+    +'recomendacion (string: 1-2 oraciones).';
+
+  try{
+    const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key='+getApiKey(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})});
+    const data=await res.json();
+    if(data.error){document.getElementById('resumen-output').textContent='Error: '+data.error.message;return;}
+    const text=data.candidates[0].content.parts[0].text||'';
+    const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+    window._lastResumen={proyecto:p.nombre,fecha:new Date().toLocaleDateString('es'),data:parsed,stats:{totalReqs,porEstado,avance}};
+    const semColor=parsed.semaforo==='verde'?'#0f6e56':parsed.semaforo==='amarillo'?'#c07800':'#a32d2d';
+    const semEmoji=parsed.semaforo==='verde'?'🟢':parsed.semaforo==='amarillo'?'🟡':'🔴';
+    const out=document.getElementById('resumen-output');
+    if(!out)return;
+    let html='<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:0.5px solid var(--color-border-tertiary)">'
+      +'<span style="font-size:24px">'+semEmoji+'</span>'
+      +'<div><div style="font-size:15px;font-weight:600;color:'+semColor+'">'+escH(parsed.estado_general)+'</div>'
+      +'<div style="font-size:12px;color:var(--color-text-secondary)">'+escH(parsed.resumen_ejecutivo)+'</div></div></div>';
+    html+='<div style="display:grid;grid-template-columns:repeat('+STATES.length+',1fr);gap:6px;margin-bottom:14px">';
+    porEstado.forEach(function(e){html+='<div style="text-align:center;background:var(--color-background-primary);border-radius:6px;padding:6px 4px"><div style="font-size:16px;font-weight:600">'+e.total+'</div><div style="font-size:9px;color:var(--color-text-tertiary);text-transform:uppercase">'+e.estado+'</div></div>';});
+    html+='</div>';
+    if(parsed.alertas&&parsed.alertas.filter(Boolean).length){
+      html+='<div style="background:#501313;border-radius:6px;padding:10px 12px;margin-bottom:10px"><div style="font-size:11px;font-weight:600;color:#F09595;margin-bottom:4px">⚠ ALERTAS</div>';
+      parsed.alertas.filter(Boolean).forEach(function(a){html+='<div style="font-size:12px;color:#F09595">• '+escH(a)+'</div>';});
+      html+='</div>';
+    }
+    if(parsed.logros_recientes&&parsed.logros_recientes.length){
+      html+='<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;margin-bottom:6px">✅ Logros recientes</div>';
+      parsed.logros_recientes.forEach(function(l){html+='<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:3px">• '+escH(l)+'</div>';});
+      html+='</div>';
+    }
+    if(parsed.riesgos_activos&&parsed.riesgos_activos.filter(Boolean).length){
+      html+='<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;margin-bottom:6px">⚡ Riesgos activos</div>';
+      parsed.riesgos_activos.filter(Boolean).forEach(function(r){html+='<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:3px">• '+escH(r)+'</div>';});
+      html+='</div>';
+    }
+    if(parsed.proximos_pasos&&parsed.proximos_pasos.length){
+      html+='<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;margin-bottom:6px">📋 Próximos pasos</div>';
+      parsed.proximos_pasos.forEach(function(p){html+='<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:3px">• '+escH(p)+'</div>';});
+      html+='</div>';
+    }
+    html+='<div style="padding:10px 12px;background:var(--color-background-primary);border-radius:6px;border-left:2px solid var(--color-text-info);font-size:12px;color:var(--color-text-secondary)"><b>Recomendación:</b> '+escH(parsed.recomendacion)+'</div>';
+    out.innerHTML=html;
+    const btn=document.getElementById('btn-export-resumen');
+    if(btn)btn.style.display='inline-flex';
+  }catch(e){
+    const out=document.getElementById('resumen-output');
+    if(out)out.textContent='Error: '+e.message;
+  }
+}
+
+function exportarResumenPDF(){
+  if(!window._lastResumen)return;
+  const d=window._lastResumen.data;
+  const stats=window._lastResumen.stats;
+  const fecha=window._lastResumen.fecha;
+  const proyecto=window._lastResumen.proyecto;
+  const semEmoji=d.semaforo==='verde'?'🟢':d.semaforo==='amarillo'?'🟡':'🔴';
+  const semColor=d.semaforo==='verde'?'#0f6e56':d.semaforo==='amarillo'?'#c07800':'#a32d2d';
+  const win=window.open('','_blank');
+  let html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Resumen '+proyecto+'</title>'
+    +'<style>body{font-family:Arial,sans-serif;max-width:780px;margin:40px auto;color:#1a1a18;font-size:13px;line-height:1.6}'
+    +'.header{display:flex;align-items:center;gap:16px;padding-bottom:16px;border-bottom:2px solid #1a1a18;margin-bottom:24px}'
+    +'h2{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#555;border-bottom:1px solid #eee;padding-bottom:4px;margin:18px 0 8px}'
+    +'.grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:16px}'
+    +'.kpi{text-align:center;background:#f5f5f4;border-radius:6px;padding:8px 4px}'
+    +'.kpi-val{font-size:18px;font-weight:700}.kpi-label{font-size:9px;color:#888;text-transform:uppercase}'
+    +'ul{padding-left:18px;margin:0}li{margin-bottom:3px;font-size:12px}'
+    +'.rec{padding:10px 12px;border-left:3px solid #185fa5;background:#E6F1FB;border-radius:0 6px 6px 0;font-size:12px}'
+    +'.footer{margin-top:32px;padding-top:8px;border-top:1px solid #eee;font-size:10px;color:#aaa;display:flex;justify-content:space-between}'
+    +'@media print{button{display:none}}</style></head><body>'
+    +'<div class="header"><span style="font-size:32px">'+semEmoji+'</span>'
+    +'<div><h1 style="font-size:20px;margin:0 0 4px">'+escH(proyecto)+'</h1>'
+    +'<div style="font-size:14px;font-weight:600;color:'+semColor+'">'+escH(d.estado_general)+'</div>'
+    +'<div style="font-size:12px;color:#888">Resumen ejecutivo · '+fecha+'</div></div></div>'
+    +'<p>'+escH(d.resumen_ejecutivo)+'</p>'
+    +'<h2>Avance por estado</h2><div class="grid">';
+  stats.porEstado.forEach(function(e){html+='<div class="kpi"><div class="kpi-val">'+e.total+'</div><div class="kpi-label">'+e.estado+'</div></div>';});
+  html+='</div>';
+  if(d.logros_recientes&&d.logros_recientes.length){html+='<h2>Logros recientes</h2><ul>';d.logros_recientes.forEach(function(l){html+='<li>'+escH(l)+'</li>';});html+='</ul>';}
+  if(d.riesgos_activos&&d.riesgos_activos.filter(Boolean).length){html+='<h2>Riesgos activos</h2><ul>';d.riesgos_activos.filter(Boolean).forEach(function(r){html+='<li>'+escH(r)+'</li>';});html+='</ul>';}
+  if(d.alertas&&d.alertas.filter(Boolean).length){html+='<h2>Alertas</h2><ul>';d.alertas.filter(Boolean).forEach(function(a){html+='<li>'+escH(a)+'</li>';});html+='</ul>';}
+  html+='<h2>Próximos pasos</h2><ul>';d.proximos_pasos.forEach(function(p){html+='<li>'+escH(p)+'</li>';});html+='</ul>';
+  html+='<h2>Recomendación</h2><div class="rec">'+escH(d.recomendacion)+'</div>';
+  html+='<div class="footer"><span>ReqManager · Resumen Ejecutivo</span><span>'+fecha+'</span></div>';
+  html+='<br><button onclick="window.print()">Imprimir / Guardar PDF</button></body></html>';
+  win.document.write(html);
+  win.document.close();
 }
 
 /* ── PRÓXIMAMENTE ── */
