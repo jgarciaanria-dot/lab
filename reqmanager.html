@@ -214,7 +214,9 @@ const DB={
   solicitudes(){return this.get('solicitudes')||[]},
   saveSolicitudes(d){this.set('solicitudes',d);flashSave()},
   ers(){return this.get('ers')||[]},
-  saveErs(d){this.set('ers',d);flashSave()}
+  saveErs(d){this.set('ers',d);flashSave()},
+  qa(){return this.get('qa')||[]},
+  saveQa(d){this.set('qa',d);flashSave()}
 };
 
 function flashSave(){
@@ -280,7 +282,7 @@ function mkBtn(cls,html,fn){
 
 function renderView(v){
   const c=document.getElementById('content');
-  const map={dashboard:renderDashboard,projects:renderProjects,relevamientos:renderRelevamientos,requerimientos:renderRequerimientos,archivados:renderArchivados,especificacion:renderEspecificacion,seguimiento:renderSeguimiento,evidencias:renderEvidencias,solicitudes:renderSolicitudes,historias:()=>renderProximamente('historias','Historias de usuario','ti-subtask','Generación de historias de usuario en formato Como/Quiero/Para con exportación a Jira y Azure DevOps.'),qa:()=>renderProximamente('qa','Control de calidad (QA)','ti-bug','Casos de prueba, ejecuciones y registro de defectos por requerimiento.'),uat:()=>renderProximamente('uat','Pruebas de aceptación (UAT)','ti-user-check','Gestión de pruebas de aceptación con evidencias y aprobación formal.'),reportes:()=>renderProximamente('reportes','Reportes','ti-chart-bar','Reportes de avance, métricas de calidad y dashboards ejecutivos por proyecto.')};
+  const map={dashboard:renderDashboard,projects:renderProjects,relevamientos:renderRelevamientos,requerimientos:renderRequerimientos,archivados:renderArchivados,especificacion:renderEspecificacion,seguimiento:renderSeguimiento,evidencias:renderEvidencias,solicitudes:renderSolicitudes,historias:()=>renderProximamente('historias','Historias de usuario','ti-subtask','Generación de historias de usuario en formato Como/Quiero/Para con exportación a Jira y Azure DevOps.'),qa:renderQA,uat:()=>renderProximamente('uat','Pruebas de aceptación (UAT)','ti-user-check','Gestión de pruebas de aceptación con evidencias y aprobación formal.'),reportes:()=>renderProximamente('reportes','Reportes','ti-chart-bar','Reportes de avance, métricas de calidad y dashboards ejecutivos por proyecto.')};
   c.innerHTML=(map[v]||renderDashboard)();
 }
 
@@ -2078,6 +2080,211 @@ function exportarResumenPDF(){
   win.document.close();
 }
 
+/* ── QA ── */
+const QA_ESTADOS=['Pendiente','Ejecutando','Pasó','Falló'];
+const QA_EST_KEY=['pending','analysis','prod','high'];
+const QA_SEV=['Crítico','Alto','Medio','Bajo'];
+const QA_SEV_KEY=['high','high','medium','low'];
+const DEF_ESTADOS=['Abierto','En corrección','Cerrado'];
+
+function renderQA(){
+  const projs=DB.projects();
+  if(!projs.length)return `<div class="empty-state"><i class="ti ti-bug"></i><p>No hay proyectos registrados.<br>Crea un proyecto primero.</p></div>`;
+
+  // Selector de proyecto
+  const qaState=DB.qa();
+  const proyectoActivo=window._qaProyecto||projs[0]?.nombre||'';
+
+  const reqs=DB.requerimientos().filter(r=>r.proyecto===proyectoActivo&&r.casos_prueba&&r.casos_prueba.length>0);
+  const todosReqs=DB.requerimientos().filter(r=>r.proyecto===proyectoActivo);
+  const defectos=qaState.filter(d=>d.tipo==='defecto'&&d.proyecto===proyectoActivo);
+  const ejecuciones=qaState.filter(e=>e.tipo==='ejecucion'&&e.proyecto===proyectoActivo);
+
+  // Métricas
+  const totalCasos=reqs.reduce(function(s,r){return s+r.casos_prueba.length;},0);
+  const pasaron=ejecuciones.filter(e=>e.resultado==='Pasó').length;
+  const fallaron=ejecuciones.filter(e=>e.resultado==='Falló').length;
+  const cobertura=totalCasos?Math.round(ejecuciones.length/totalCasos*100):0;
+  const defAbiertos=defectos.filter(d=>d.estado==='Abierto').length;
+
+  let html='<div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">'
+    +'<select onchange="window._qaProyecto=this.value;renderView(\'qa\')" style="font-size:13px;padding:6px 10px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:var(--color-background-primary);color:var(--color-text-primary)">'
+    +projs.map(function(p){return '<option'+(p.nombre===proyectoActivo?' selected':'')+'>'+escH(p.nombre)+'</option>';}).join('')
+    +'</select>'
+    +'<button class="btn primary" onclick="importarCasosPrueba(\''+escH(proyectoActivo)+'\')"><i class="ti ti-download"></i> Importar casos desde RFs</button>'
+    +'<button class="btn" onclick="abrirDefecto(null,\''+escH(proyectoActivo)+'\')"><i class="ti ti-bug"></i> Nuevo defecto</button>'
+    +'</div>';
+
+  // KPIs
+  html+='<div class="metrics-row">'
+    +'<div class="metric-card"><div class="label">Casos totales</div><div class="value">'+totalCasos+'</div></div>'
+    +'<div class="metric-card"><div class="label">Ejecutados</div><div class="value">'+ejecuciones.length+'</div></div>'
+    +'<div class="metric-card"><div class="label">Pasaron</div><div class="value" style="color:var(--color-text-success)">'+pasaron+'</div></div>'
+    +'<div class="metric-card"><div class="label">Fallaron</div><div class="value" style="color:var(--color-text-danger)">'+fallaron+'</div></div>'
+    +'<div class="metric-card"><div class="label">Cobertura</div><div class="value">'+cobertura+'%</div></div>'
+    +'<div class="metric-card"><div class="label">Defectos abiertos</div><div class="value" style="color:'+(defAbiertos>0?'var(--color-text-danger)':'var(--color-text-success)')+'">'+defAbiertos+'</div></div>'
+    +'</div>';
+
+  if(!reqs.length&&!todosReqs.length){
+    html+='<div class="empty-state"><i class="ti ti-bug"></i><p>No hay requerimientos con casos de prueba en este proyecto.<br>Genera requerimientos con IA para obtener casos automáticamente.</p></div>';
+  } else if(!reqs.length){
+    html+='<div class="empty-state"><i class="ti ti-bug"></i><p>Los requerimientos de este proyecto no tienen casos de prueba.<br>Usa "Importar casos desde RFs" para generarlos o regenera los RFs con IA.</p></div>';
+  } else {
+    // Casos por requerimiento
+    html+='<div style="margin-bottom:12px;font-size:11px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.05em">Casos de prueba por requerimiento</div>';
+    reqs.forEach(function(req,ri){
+      const proj=req.proyecto||'__sin_proyecto__';
+      const delProyecto=DB.requerimientos().filter(r=>(r.proyecto||'__sin_proyecto__')===proj);
+      const posEnProyecto=delProyecto.findIndex(function(x){return x.titulo===req.titulo&&x.descripcion===req.descripcion;});
+      const rfId='RF-'+String(posEnProyecto+1).padStart(3,'0');
+      const groupId='qagrp-'+ri;
+      html+='<div style="margin-bottom:8px">'
+        +'<div onclick="toggleGroup(\''+groupId+'\')" style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:8px;cursor:pointer;user-select:none" onmouseover="this.style.background=\'var(--color-background-secondary)\'" onmouseout="this.style.background=\'var(--color-background-primary)\'">'
+        +'<i id="'+groupId+'-icon" class="ti ti-file-check" style="font-size:15px;color:var(--color-text-info)"></i>'
+        +'<span style="font-size:13px;font-weight:500;flex:1">'+rfId+' · '+escH(req.titulo)+'</span>'
+        +'<span class="badge analysis" style="font-size:11px">'+req.casos_prueba.length+' casos</span>'
+        +'<i id="'+groupId+'-chevron" class="ti ti-chevron-right" style="font-size:14px;color:var(--color-text-tertiary);transition:transform .2s"></i>'
+        +'</div>'
+        +'<div id="'+groupId+'" style="display:none;padding:6px 0 0 14px">';
+
+      req.casos_prueba.forEach(function(caso,ci){
+        const ejecId=proyectoActivo+'|'+req.titulo+'|'+ci;
+        const ejec=ejecuciones.find(function(e){return e.id===ejecId;});
+        const resultado=ejec?ejec.resultado:'Pendiente';
+        const estKey=QA_EST_KEY[QA_ESTADOS.indexOf(resultado)]||'pending';
+        html+='<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:6px;margin-bottom:5px">'
+          +'<span class="badge '+estKey+'" style="font-size:10px;min-width:70px;text-align:center">'+resultado+'</span>'
+          +'<span class="badge '+(caso.tipo==='positivo'?'prod':caso.tipo==='negativo'?'high':'analysis')+'" style="font-size:10px">'+escH(caso.tipo)+'</span>'
+          +'<span style="font-size:12px;flex:1;color:var(--color-text-secondary)">'+escH(caso.descripcion)+'</span>'
+          +'<div style="display:flex;gap:5px;flex-shrink:0">'
+          +'<button class="btn sm" style="color:var(--color-text-success);border-color:rgba(15,110,86,0.3);font-size:11px" onclick="ejecutarCaso(\''+escH(proyectoActivo)+'\','+ri+','+ci+',\'Pasó\')">✓ Pasó</button>'
+          +'<button class="btn sm" style="color:var(--color-text-danger);border-color:rgba(163,45,45,0.3);font-size:11px" onclick="ejecutarCaso(\''+escH(proyectoActivo)+'\','+ri+','+ci+',\'Falló\')">✗ Falló</button>'
+          +(ejec?'<button class="btn sm" style="font-size:11px" onclick="ejecutarCaso(\''+escH(proyectoActivo)+'\','+ri+','+ci+',\'Pendiente\')">↩</button>':'')
+          +'</div>'
+          +'</div>';
+        if(ejec&&ejec.resultado==='Falló'){
+          const def=defectos.find(function(d){return d.caso_id===ejecId;});
+          if(def){
+            html+='<div style="margin:-2px 0 5px 16px;padding:7px 10px;background:var(--color-background-secondary);border-radius:6px;border-left:2px solid var(--color-text-danger);font-size:11px">'
+              +'<span class="badge '+QA_SEV_KEY[QA_SEV.indexOf(def.severidad)]+'">'+def.severidad+'</span> '
+              +'<span style="color:var(--color-text-secondary)">'+escH(def.descripcion)+'</span> '
+              +'<span class="badge '+(def.estado==='Abierto'?'high':def.estado==='En corrección'?'medium':'prod')+'">'+def.estado+'</span> '
+              +'<button onclick="abrirDefecto(\''+ejecId+'\',\''+escH(proyectoActivo)+'\')" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--color-text-info)">Editar</button>'
+              +'</div>';
+          } else {
+            html+='<div style="margin:-2px 0 5px 16px">'
+              +'<button class="btn sm" style="color:var(--color-text-danger);border-color:rgba(163,45,45,0.3);font-size:11px" onclick="abrirDefecto(\''+ejecId+'\',\''+escH(proyectoActivo)+'\')"><i class="ti ti-bug"></i> Registrar defecto</button>'
+              +'</div>';
+          }
+        }
+      });
+      html+='</div></div>';
+    });
+  }
+
+  // Defectos
+  if(defectos.length){
+    html+='<div style="margin-top:20px;margin-bottom:10px;font-size:11px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.05em">Defectos registrados ('+defectos.length+')</div>'
+      +'<div class="card" style="padding:0;overflow:hidden"><table>'
+      +'<thead><tr><th>ID</th><th>Descripción</th><th>Severidad</th><th>Estado</th><th>Requerimiento</th><th></th></tr></thead>'
+      +'<tbody>';
+    defectos.forEach(function(d,di){
+      html+='<tr>'
+        +'<td style="font-size:11px;font-weight:600">DEF-'+String(di+1).padStart(3,'0')+'</td>'
+        +'<td style="font-size:12px">'+escH(d.descripcion)+'</td>'
+        +'<td><span class="badge '+QA_SEV_KEY[QA_SEV.indexOf(d.severidad)]+'">'+d.severidad+'</span></td>'
+        +'<td><span class="badge '+(d.estado==='Abierto'?'high':d.estado==='En corrección'?'medium':'prod')+'">'+d.estado+'</span></td>'
+        +'<td style="font-size:11px;color:var(--color-text-secondary)">'+escH(d.rf_titulo||'—')+'</td>'
+        +'<td><button class="btn sm" onclick="abrirDefecto(\''+escH(d.caso_id||'')+'\',\''+escH(proyectoActivo)+'\','+di+')"><i class="ti ti-edit"></i></button></td>'
+        +'</tr>';
+    });
+    html+='</tbody></table></div>';
+  }
+
+  return html;
+}
+
+function importarCasosPrueba(proyecto){
+  const reqs=DB.requerimientos().filter(function(r){return r.proyecto===proyecto&&r.casos_prueba&&r.casos_prueba.length>0;});
+  if(!reqs.length){alert('No hay requerimientos con casos de prueba en este proyecto. Genera requerimientos con IA primero.');return;}
+  alert('Se encontraron '+reqs.reduce(function(s,r){return s+r.casos_prueba.length;},0)+' casos de prueba en '+reqs.length+' requerimientos. Ya están disponibles para ejecutar.');
+  renderView('qa');
+}
+
+function ejecutarCaso(proyecto,reqIdx,casoIdx,resultado){
+  const reqs=DB.requerimientos().filter(function(r){return r.proyecto===proyecto&&r.casos_prueba&&r.casos_prueba.length>0;});
+  if(!reqs[reqIdx])return;
+  const req=reqs[reqIdx];
+  const ejecId=proyecto+'|'+req.titulo+'|'+casoIdx;
+  const qa=DB.qa();
+  const existente=qa.findIndex(function(e){return e.id===ejecId&&e.tipo==='ejecucion';});
+  if(resultado==='Pendiente'){
+    if(existente>=0)qa.splice(existente,1);
+  } else {
+    const ejec={tipo:'ejecucion',id:ejecId,proyecto,rf_titulo:req.titulo,caso_idx:casoIdx,resultado,fecha:new Date().toISOString().split('T')[0]};
+    if(existente>=0)qa[existente]=ejec;else qa.push(ejec);
+  }
+  DB.saveQa(qa);
+  renderView('qa');
+}
+
+function abrirDefecto(casoId,proyecto,defIdx){
+  const qa=DB.qa();
+  const defectos=qa.filter(function(d){return d.tipo==='defecto'&&d.proyecto===proyecto;});
+  const def=defIdx!==undefined?defectos[defIdx]:null;
+  const isEdit=def!==undefined&&def!==null;
+  const reqs=DB.requerimientos().filter(function(r){return r.proyecto===proyecto;});
+
+  showModal('<h3>'+(isEdit?'Editar':'Nuevo')+' defecto</h3>'
+    +'<div class="field"><label>Descripción del defecto *</label><textarea id="def-desc" style="min-height:80px">'+(isEdit?escH(def.descripcion):'')+'</textarea></div>'
+    +'<div class="form-row">'
+    +'<div class="field"><label>Severidad</label><select id="def-sev">'
+    +QA_SEV.map(function(s){return '<option'+(isEdit&&s===def.severidad?' selected':'')+'>'+s+'</option>';}).join('')
+    +'</select></div>'
+    +'<div class="field"><label>Estado</label><select id="def-estado">'
+    +DEF_ESTADOS.map(function(s){return '<option'+(isEdit&&s===def.estado?' selected':'')+'>'+s+'</option>';}).join('')
+    +'</select></div>'
+    +'</div>'
+    +'<div class="field"><label>Requerimiento asociado</label><select id="def-rf">'
+    +'<option value="">Sin requerimiento</option>'
+    +reqs.map(function(r){return '<option'+(isEdit&&r.titulo===def.rf_titulo?' selected':'')+'>'+escH(r.titulo)+'</option>';}).join('')
+    +'</select></div>'
+    +'<div class="field"><label>Pasos para reproducir</label><textarea id="def-pasos" style="min-height:60px">'+(isEdit?escH(def.pasos||''):'')+'</textarea></div>'
+    +'<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">'
+    +(isEdit?'<button class="btn danger" onclick="eliminarDefecto(\''+proyecto+'\','+defIdx+')"><i class="ti ti-trash"></i></button>':'')
+    +'<button class="btn" onclick="closeModal()">Cancelar</button>'
+    +'<button class="btn primary" onclick="guardarDefecto(\''+escH(casoId||'')+'\',\''+escH(proyecto)+'\','+(isEdit?defIdx:-1)+')"><i class="ti ti-check"></i> Guardar</button>'
+    +'</div>');
+}
+
+function guardarDefecto(casoId,proyecto,defIdx){
+  const desc=v('def-desc').trim();
+  if(!desc){alert('La descripción es obligatoria.');return;}
+  const def={tipo:'defecto',caso_id:casoId,proyecto,descripcion:desc,severidad:v('def-sev'),estado:v('def-estado'),rf_titulo:v('def-rf'),pasos:v('def-pasos'),fecha:new Date().toISOString().split('T')[0]};
+  const qa=DB.qa();
+  const defectos=qa.filter(function(d){return d.tipo==='defecto'&&d.proyecto===proyecto;});
+  if(defIdx>=0){
+    const globalIdx=qa.indexOf(defectos[defIdx]);
+    if(globalIdx>=0)qa[globalIdx]=def;
+  } else {
+    qa.push(def);
+  }
+  DB.saveQa(qa);
+  closeModal();
+  renderView('qa');
+}
+
+function eliminarDefecto(proyecto,defIdx){
+  if(!confirm('¿Eliminar este defecto?'))return;
+  const qa=DB.qa();
+  const defectos=qa.filter(function(d){return d.tipo==='defecto'&&d.proyecto===proyecto;});
+  const globalIdx=qa.indexOf(defectos[defIdx]);
+  if(globalIdx>=0)qa.splice(globalIdx,1);
+  DB.saveQa(qa);
+  closeModal();
+  renderView('qa');
+}
+
 /* ── PRÓXIMAMENTE ── */
 function renderProximamente(id,titulo,icono,descripcion){
   return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;text-align:center;padding:40px">
@@ -2126,7 +2333,8 @@ function exportarDatos(){
     requerimientos:DB.requerimientos(),
     archivados:DB.archivados(),
     solicitudes:DB.solicitudes(),
-    ers:DB.ers()
+    ers:DB.ers(),
+    qa:DB.qa()
   };
   const json=JSON.stringify(data,null,2);
   const blob=new Blob([json],{type:'application/json'});
@@ -2157,6 +2365,7 @@ function importarDatos(input){
       if(data.archivados) DB.saveArchivados(data.archivados);
       if(data.solicitudes) DB.saveSolicitudes(data.solicitudes);
       if(data.ers) DB.saveErs(data.ers);
+      if(data.qa) DB.saveQa(data.qa);
       input.value='';
       alert('¡Datos importados correctamente!');
       navigate('dashboard');
