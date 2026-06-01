@@ -152,15 +152,37 @@ tr:hover td{background:var(--color-background-secondary)}
   #content{padding:0}
   .modal-overlay,.modal{display:none!important}
   body{background:white}
-}
+#login-screen{position:fixed;inset:0;background:var(--color-background-tertiary);display:flex;align-items:center;justify-content:center;z-index:9999}
+.login-box{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:36px 32px;width:min(380px,92vw);box-shadow:0 8px 32px rgba(0,0,0,.12)}
+.login-box h1{font-size:18px;font-weight:600;margin-bottom:4px}
+.login-box p{font-size:12px;color:var(--color-text-tertiary);margin-bottom:28px}
+.login-error{font-size:12px;color:var(--color-text-danger);margin-top:10px;display:none}
 </style>
 </head>
 <body>
-<div id="app">
+<div id="login-screen">
+  <div class="login-box">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+      <i class="ti ti-layers-intersect" style="font-size:28px;color:var(--color-text-info)"></i>
+      <div><h1>ReqManager</h1><p style="margin-bottom:0">Gestión de requerimientos</p></div>
+    </div>
+    <div class="field"><label>Usuario</label><input id="login-user" type="text" placeholder="Usuario" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('login-pass').focus()"></div>
+    <div class="field" style="margin-top:12px"><label>Contraseña</label><input id="login-pass" type="password" placeholder="Contraseña" autocomplete="current-password" onkeydown="if(event.key==='Enter')intentarLogin()"></div>
+    <div class="login-error" id="login-error"><i class="ti ti-alert-circle" style="font-size:12px"></i> Usuario o contraseña incorrectos.</div>
+    <button class="btn primary" style="width:100%;justify-content:center;margin-top:16px" onclick="intentarLogin()"><i class="ti ti-login"></i> Ingresar</button>
+    <div style="margin-top:20px;padding-top:16px;border-top:0.5px solid var(--color-border-tertiary);font-size:11px;color:var(--color-text-tertiary);text-align:center">
+      Primera vez · <span style="cursor:pointer;color:var(--color-text-info)" onclick="mostrarConfigLogin()">Configurar credenciales</span>
+    </div>
+  </div>
+</div>
+<div id="app" style="display:none">
   <div id="sidebar">
     <div id="sidebar-header">
-      <h1><i class="ti ti-layers-intersect"></i> ReqManager</h1>
-      <p>Gestión de requerimientos</p>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <h1><i class="ti ti-layers-intersect"></i> ReqManager</h1>
+        <button onclick="cerrarSesion()" title="Cerrar sesión" style="background:none;border:none;cursor:pointer;color:var(--color-text-tertiary);font-size:16px;padding:2px"><i class="ti ti-logout"></i></button>
+      </div>
+      <p id="sidebar-user" style="margin-top:2px">Gestión de requerimientos</p>
     </div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -2796,7 +2818,78 @@ function closeModal(){document.getElementById('modal-container').innerHTML='';}
 function v(id){return document.getElementById(id)?.value||'';}
 function escH(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
-navigate('dashboard');
+/* ── LOGIN ── */
+function intentarLogin(){
+  const user=document.getElementById('login-user')?.value.trim();
+  const pass=document.getElementById('login-pass')?.value;
+  const credenciales=DB.get('credenciales')||{usuario:'admin',password:'admin'};
+  const errEl=document.getElementById('login-error');
+  if(user===credenciales.usuario&&pass===credenciales.password){
+    sessionStorage.setItem('reqmgr_logged','1');
+    sessionStorage.setItem('reqmgr_user',user);
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app').style.display='flex';
+    const su=document.getElementById('sidebar-user');
+    if(su)su.textContent='👤 '+user;
+    navigate('dashboard');
+  } else {
+    if(errEl)errEl.style.display='block';
+    document.getElementById('login-pass').value='';
+    document.getElementById('login-pass').focus();
+  }
+}
+
+function cerrarSesion(){
+  if(!confirm('¿Cerrar sesión?'))return;
+  sessionStorage.removeItem('reqmgr_logged');
+  sessionStorage.removeItem('reqmgr_user');
+  document.getElementById('app').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('login-user').value='';
+  document.getElementById('login-pass').value='';
+  const errEl=document.getElementById('login-error');
+  if(errEl)errEl.style.display='none';
+}
+
+function mostrarConfigLogin(){
+  const creds=DB.get('credenciales')||{usuario:'admin',password:'admin'};
+  showModal('<h3>Configurar credenciales</h3>'
+    +'<p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:16px;line-height:1.6">Las credenciales se guardan en tu navegador.</p>'
+    +'<div class="field"><label>Usuario</label><input id="cfg-user" value="'+escH(creds.usuario)+'" placeholder="Usuario"></div>'
+    +'<div class="field" style="margin-top:10px"><label>Contraseña nueva</label><input id="cfg-pass" type="password" placeholder="Nueva contraseña"></div>'
+    +'<div class="field" style="margin-top:10px"><label>Confirmar contraseña</label><input id="cfg-pass2" type="password" placeholder="Repite la contraseña"></div>'
+    +'<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">'
+    +'<button class="btn" onclick="closeModal()">Cancelar</button>'
+    +'<button class="btn primary" onclick="guardarCredenciales()"><i class="ti ti-check"></i> Guardar</button>'
+    +'</div>');
+}
+
+function guardarCredenciales(){
+  const user=v('cfg-user').trim();
+  const pass=v('cfg-pass');
+  const pass2=v('cfg-pass2');
+  if(!user){alert('El usuario es obligatorio.');return;}
+  if(!pass){alert('La contraseña es obligatoria.');return;}
+  if(pass!==pass2){alert('Las contraseñas no coinciden.');return;}
+  DB.set('credenciales',{usuario:user,password:pass});
+  closeModal();
+  alert('¡Credenciales guardadas!');
+}
+
+// Inicialización
+(function(){
+  if(sessionStorage.getItem('reqmgr_logged')==='1'){
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app').style.display='flex';
+    const user=sessionStorage.getItem('reqmgr_user')||'';
+    const su=document.getElementById('sidebar-user');
+    if(su&&user)su.textContent='👤 '+user;
+    navigate('dashboard');
+  } else {
+    if(!DB.get('credenciales'))DB.set('credenciales',{usuario:'admin',password:'admin'});
+    document.getElementById('login-user').focus();
+  }
+})();
 
 /* ── BACKUP / RESTAURAR ── */
 function exportarDatos(){
