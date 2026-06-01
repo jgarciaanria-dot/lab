@@ -216,7 +216,9 @@ const DB={
   ers(){return this.get('ers')||[]},
   saveErs(d){this.set('ers',d);flashSave()},
   qa(){return this.get('qa')||[]},
-  saveQa(d){this.set('qa',d);flashSave()}
+  saveQa(d){this.set('qa',d);flashSave()},
+  uat(){return this.get('uat')||[]},
+  saveUat(d){this.set('uat',d);flashSave()}
 };
 
 function flashSave(){
@@ -271,6 +273,9 @@ function navigate(view){
   if(view==='especificacion'){
     const b=mkBtn('primary','<i class="ti ti-sparkles"></i> Generar ERS con IA',()=>openErsModal());acts.appendChild(b);
   }
+  if(view==='uat'){
+    const b=mkBtn('primary','<i class="ti ti-plus"></i> Nuevo ciclo UAT',()=>abrirCicloUAT());acts.appendChild(b);
+  }
   renderView(view);
 }
 
@@ -282,7 +287,7 @@ function mkBtn(cls,html,fn){
 
 function renderView(v){
   const c=document.getElementById('content');
-  const map={dashboard:renderDashboard,projects:renderProjects,relevamientos:renderRelevamientos,requerimientos:renderRequerimientos,archivados:renderArchivados,especificacion:renderEspecificacion,seguimiento:renderSeguimiento,evidencias:renderEvidencias,solicitudes:renderSolicitudes,historias:()=>renderProximamente('historias','Historias de usuario','ti-subtask','Generación de historias de usuario en formato Como/Quiero/Para con exportación a Jira y Azure DevOps.'),qa:renderQA,uat:()=>renderProximamente('uat','Pruebas de aceptación (UAT)','ti-user-check','Gestión de pruebas de aceptación con evidencias y aprobación formal.'),reportes:()=>renderProximamente('reportes','Reportes','ti-chart-bar','Reportes de avance, métricas de calidad y dashboards ejecutivos por proyecto.')};
+  const map={dashboard:renderDashboard,projects:renderProjects,relevamientos:renderRelevamientos,requerimientos:renderRequerimientos,archivados:renderArchivados,especificacion:renderEspecificacion,seguimiento:renderSeguimiento,evidencias:renderEvidencias,solicitudes:renderSolicitudes,historias:()=>renderProximamente('historias','Historias de usuario','ti-subtask','Generación de historias de usuario en formato Como/Quiero/Para con exportación a Jira y Azure DevOps.'),qa:renderQA,uat:renderUAT,reportes:()=>renderProximamente('reportes','Reportes','ti-chart-bar','Reportes de avance, métricas de calidad y dashboards ejecutivos por proyecto.')};
   c.innerHTML=(map[v]||renderDashboard)();
 }
 
@@ -2285,6 +2290,249 @@ function eliminarDefecto(proyecto,defIdx){
   renderView('qa');
 }
 
+/* ── UAT ── */
+const UAT_CICLO_ESTADOS=['En curso','Completado','Aprobado','Rechazado'];
+const UAT_ESC_ESTADOS=['Pendiente','Aprobado','Rechazado'];
+const UAT_EST_KEY={'Pendiente':'pending','Aprobado':'prod','Rechazado':'high','En curso':'analysis','Completado':'dev'};
+
+function renderUAT(){
+  const ciclos=DB.uat();
+  const projs=DB.projects();
+  if(!projs.length)return '<div class="empty-state"><i class="ti ti-user-check"></i><p>No hay proyectos registrados.</p></div>';
+  if(!ciclos.length)return '<div class="empty-state"><i class="ti ti-user-check"></i><p>No hay ciclos UAT registrados.<br>Crea el primero con el botón de arriba.</p></div>';
+
+  return ciclos.map(function(ciclo,ci){
+    const total=ciclo.escenarios?ciclo.escenarios.length:0;
+    const aprobados=ciclo.escenarios?ciclo.escenarios.filter(function(e){return e.estado==='Aprobado';}).length:0;
+    const rechazados=ciclo.escenarios?ciclo.escenarios.filter(function(e){return e.estado==='Rechazado';}).length:0;
+    const pendientes=total-aprobados-rechazados;
+    const pct=total?Math.round(aprobados/total*100):0;
+    const groupId='uatgrp-'+ci;
+    const estKey=UAT_EST_KEY[ciclo.estado]||'pending';
+
+    let html='<div class="card" style="margin-bottom:12px">'
+      +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">'
+      +'<div style="flex:1">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">'
+      +'<span style="font-size:11px;font-weight:600;color:var(--color-text-tertiary)">UAT-'+String(ci+1).padStart(3,'0')+' · '+escH(ciclo.proyecto)+'</span>'
+      +'<span class="badge '+estKey+'">'+ciclo.estado+'</span>'
+      +'</div>'
+      +'<div style="font-size:14px;font-weight:500">'+escH(ciclo.nombre)+'</div>'
+      +'<div style="font-size:12px;color:var(--color-text-tertiary);margin-top:2px">Aprobador: '+escH(ciclo.aprobador||'No definido')+' · '+ciclo.fecha+'</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:6px">'
+      +'<button class="btn sm" onclick="abrirCicloUAT('+ci+')"><i class="ti ti-edit"></i></button>'
+      +(ciclo.estado!=='Aprobado'?'<button class="btn sm" onclick="cerrarCicloUAT('+ci+')" style="color:var(--color-text-success);border-color:rgba(15,110,86,0.3)"><i class="ti ti-check"></i> Cerrar ciclo</button>':'')
+      +'<button class="btn sm" onclick="exportarActaUAT('+ci+')" style="color:var(--color-text-info);border-color:rgba(24,95,165,0.3)"><i class="ti ti-file-export"></i> Acta PDF</button>'
+      +'</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:8px;margin-bottom:12px">'
+      +'<div style="flex:1;background:var(--color-background-secondary);border-radius:6px;padding:8px 12px;text-align:center"><div style="font-size:18px;font-weight:600;color:var(--color-text-success)">'+aprobados+'</div><div style="font-size:10px;color:var(--color-text-tertiary);text-transform:uppercase">Aprobados</div></div>'
+      +'<div style="flex:1;background:var(--color-background-secondary);border-radius:6px;padding:8px 12px;text-align:center"><div style="font-size:18px;font-weight:600;color:var(--color-text-danger)">'+rechazados+'</div><div style="font-size:10px;color:var(--color-text-tertiary);text-transform:uppercase">Rechazados</div></div>'
+      +'<div style="flex:1;background:var(--color-background-secondary);border-radius:6px;padding:8px 12px;text-align:center"><div style="font-size:18px;font-weight:600">'+pendientes+'</div><div style="font-size:10px;color:var(--color-text-tertiary);text-transform:uppercase">Pendientes</div></div>'
+      +'<div style="flex:1;background:var(--color-background-secondary);border-radius:6px;padding:8px 12px;text-align:center"><div style="font-size:18px;font-weight:600;color:var(--color-text-info)">'+pct+'%</div><div style="font-size:10px;color:var(--color-text-tertiary);text-transform:uppercase">Aceptación</div></div>'
+      +'</div>'
+      +'<div class="progress-bar" style="margin-bottom:14px"><div class="progress-fill" style="width:'+pct+'%;background:var(--color-text-success)"></div></div>';
+
+    // Escenarios
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+      +'<span style="font-size:11px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.05em">Escenarios ('+total+')</span>'
+      +'<button class="btn sm" onclick="agregarEscenario('+ci+')"><i class="ti ti-plus"></i> Agregar</button>'
+      +'</div>';
+
+    if(!total){
+      html+='<div style="text-align:center;padding:20px;color:var(--color-text-tertiary);font-size:12px">No hay escenarios. Agrega uno o importa desde requerimientos.</div>';
+      html+='<button class="btn" style="width:100%;justify-content:center;margin-top:4px" onclick="importarEscenariosDeRFs('+ci+')"><i class="ti ti-download"></i> Importar desde RFs del proyecto</button>';
+    } else {
+      ciclo.escenarios.forEach(function(esc,ei){
+        const estKey2=UAT_EST_KEY[esc.estado]||'pending';
+        html+='<div style="border:0.5px solid var(--color-border-tertiary);border-radius:6px;padding:10px 12px;margin-bottom:6px">'
+          +'<div style="display:flex;align-items:flex-start;gap:10px">'
+          +'<span class="badge '+estKey2+'" style="margin-top:2px;flex-shrink:0">'+esc.estado+'</span>'
+          +'<div style="flex:1">'
+          +'<div style="font-size:13px;font-weight:500;margin-bottom:3px">'+escH(esc.titulo)+'</div>'
+          +(esc.descripcion?'<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:4px">'+escH(esc.descripcion)+'</div>':'')
+          +(esc.observaciones?'<div style="font-size:11px;color:var(--color-text-tertiary);padding:5px 8px;background:var(--color-background-secondary);border-radius:4px;margin-bottom:4px"><i class="ti ti-message" style="font-size:10px"></i> '+escH(esc.observaciones)+'</div>':'')
+          +(esc.aprobado_por?'<div style="font-size:11px;color:var(--color-text-tertiary)"><i class="ti ti-user-check" style="font-size:10px"></i> '+escH(esc.aprobado_por)+' · '+escH(esc.fecha_aprobacion||'')+'</div>':'')
+          +'</div>'
+          +'<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">'
+          +'<button class="btn sm" style="color:var(--color-text-success);border-color:rgba(15,110,86,0.3);font-size:11px" onclick="evaluarEscenario('+ci+','+ei+',\'Aprobado\')">✓ Aprobar</button>'
+          +'<button class="btn sm" style="color:var(--color-text-danger);border-color:rgba(163,45,45,0.3);font-size:11px" onclick="evaluarEscenarioModal('+ci+','+ei+')">✗ Rechazar</button>'
+          +'</div>'
+          +'</div>'
+          +'</div>';
+      });
+    }
+    html+='</div>';
+    return html;
+  }).join('');
+}
+
+function abrirCicloUAT(idx){
+  const isEdit=idx!==undefined;
+  const ciclo=isEdit?DB.uat()[idx]:{nombre:'',proyecto:'',aprobador:'',fecha:new Date().toISOString().split('T')[0],estado:'En curso',escenarios:[]};
+  const projs=DB.projects();
+  showModal('<h3>'+(isEdit?'Editar':'Nuevo')+' ciclo UAT</h3>'
+    +'<div class="form-row">'
+    +'<div class="field"><label>Nombre del ciclo *</label><input id="uat-nombre" value="'+escH(ciclo.nombre)+'" placeholder="Ej: Sprint 1 — Módulo de registro"></div>'
+    +'<div class="field"><label>Proyecto</label><select id="uat-proyecto"><option value="">Sin proyecto</option>'
+    +projs.map(function(p){return '<option'+(p.nombre===ciclo.proyecto?' selected':'')+'>'+escH(p.nombre)+'</option>';}).join('')
+    +'</select></div>'
+    +'</div>'
+    +'<div class="form-row">'
+    +'<div class="field"><label>Aprobador (usuario de negocio)</label><input id="uat-aprobador" value="'+escH(ciclo.aprobador||'')+'" placeholder="Nombre del aprobador"></div>'
+    +'<div class="field"><label>Fecha</label><input type="date" id="uat-fecha" value="'+ciclo.fecha+'"></div>'
+    +'</div>'
+    +'<div class="field"><label>Estado</label><select id="uat-estado">'
+    +UAT_CICLO_ESTADOS.map(function(s){return '<option'+(s===ciclo.estado?' selected':'')+'>'+s+'</option>';}).join('')
+    +'</select></div>'
+    +'<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">'
+    +(isEdit?'<button class="btn danger" onclick="eliminarCicloUAT('+idx+')"><i class="ti ti-trash"></i></button>':'')
+    +'<button class="btn" onclick="closeModal()">Cancelar</button>'
+    +'<button class="btn primary" onclick="guardarCicloUAT('+(isEdit?idx:-1)+')"><i class="ti ti-check"></i> Guardar</button>'
+    +'</div>');
+}
+
+function guardarCicloUAT(idx){
+  const nombre=v('uat-nombre').trim();
+  if(!nombre){alert('El nombre es obligatorio.');return;}
+  const ciclos=DB.uat();
+  const ciclo={nombre,proyecto:v('uat-proyecto'),aprobador:v('uat-aprobador'),fecha:v('uat-fecha'),estado:v('uat-estado'),escenarios:idx>=0?(ciclos[idx].escenarios||[]):[]};
+  if(idx>=0)ciclos[idx]=ciclo;else ciclos.push(ciclo);
+  DB.saveUat(ciclos);closeModal();renderView('uat');
+}
+
+function eliminarCicloUAT(idx){
+  if(!confirm('¿Eliminar este ciclo UAT y todos sus escenarios?'))return;
+  const ciclos=DB.uat();ciclos.splice(idx,1);DB.saveUat(ciclos);closeModal();renderView('uat');
+}
+
+function agregarEscenario(cicloIdx){
+  showModal('<h3>Nuevo escenario UAT</h3>'
+    +'<div class="field"><label>Título del escenario *</label><input id="esc-titulo" placeholder="Ej: El usuario puede registrarse con email"></div>'
+    +'<div class="field"><label>Descripción / criterio de aceptación</label><textarea id="esc-desc" style="min-height:70px"></textarea></div>'
+    +'<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">'
+    +'<button class="btn" onclick="closeModal()">Cancelar</button>'
+    +'<button class="btn primary" onclick="guardarEscenario('+cicloIdx+')"><i class="ti ti-check"></i> Agregar</button>'
+    +'</div>');
+}
+
+function guardarEscenario(cicloIdx){
+  const titulo=v('esc-titulo').trim();
+  if(!titulo){alert('El título es obligatorio.');return;}
+  const ciclos=DB.uat();
+  if(!ciclos[cicloIdx].escenarios)ciclos[cicloIdx].escenarios=[];
+  ciclos[cicloIdx].escenarios.push({titulo,descripcion:v('esc-desc'),estado:'Pendiente',observaciones:'',aprobado_por:'',fecha_aprobacion:''});
+  DB.saveUat(ciclos);closeModal();renderView('uat');
+}
+
+function importarEscenariosDeRFs(cicloIdx){
+  const ciclos=DB.uat();
+  const ciclo=ciclos[cicloIdx];
+  const reqs=DB.requerimientos().filter(function(r){return r.proyecto===ciclo.proyecto;});
+  if(!reqs.length){alert('No hay requerimientos en el proyecto "'+ciclo.proyecto+'".');return;}
+  const nuevos=reqs.map(function(r){return{titulo:r.titulo,descripcion:(r.criterios||'').substring(0,200),estado:'Pendiente',observaciones:'',aprobado_por:'',fecha_aprobacion:''};});
+  ciclos[cicloIdx].escenarios=(ciclos[cicloIdx].escenarios||[]).concat(nuevos);
+  DB.saveUat(ciclos);
+  alert('Se importaron '+nuevos.length+' escenarios desde los requerimientos.');
+  renderView('uat');
+}
+
+function evaluarEscenario(cicloIdx,escIdx,resultado){
+  const ciclos=DB.uat();
+  const esc=ciclos[cicloIdx].escenarios[escIdx];
+  esc.estado=resultado;
+  if(resultado==='Aprobado'){
+    esc.aprobado_por=ciclos[cicloIdx].aprobador||'Usuario';
+    esc.fecha_aprobacion=new Date().toLocaleDateString('es');
+  }
+  DB.saveUat(ciclos);renderView('uat');
+}
+
+function evaluarEscenarioModal(cicloIdx,escIdx){
+  showModal('<h3>Rechazar escenario</h3>'
+    +'<div class="field"><label>Observaciones / motivo del rechazo *</label><textarea id="esc-obs" style="min-height:80px" placeholder="Describir qué no funciona o qué debe corregirse..."></textarea></div>'
+    +'<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">'
+    +'<button class="btn" onclick="closeModal()">Cancelar</button>'
+    +'<button class="btn" style="color:var(--color-text-danger);border-color:rgba(163,45,45,0.3)" onclick="confirmarRechazoEscenario('+cicloIdx+','+escIdx+')"><i class="ti ti-x"></i> Confirmar rechazo</button>'
+    +'</div>');
+}
+
+function confirmarRechazoEscenario(cicloIdx,escIdx){
+  const obs=v('esc-obs').trim();
+  if(!obs){alert('El motivo del rechazo es obligatorio.');return;}
+  const ciclos=DB.uat();
+  const esc=ciclos[cicloIdx].escenarios[escIdx];
+  esc.estado='Rechazado';esc.observaciones=obs;
+  DB.saveUat(ciclos);closeModal();renderView('uat');
+}
+
+function cerrarCicloUAT(idx){
+  const ciclos=DB.uat();
+  const ciclo=ciclos[idx];
+  const rechazados=ciclo.escenarios?ciclo.escenarios.filter(function(e){return e.estado==='Rechazado';}).length:0;
+  const pendientes=ciclo.escenarios?ciclo.escenarios.filter(function(e){return e.estado==='Pendiente';}).length:0;
+  if(pendientes>0){if(!confirm('Hay '+pendientes+' escenarios pendientes. ¿Cerrar el ciclo de todas formas?'))return;}
+  ciclos[idx].estado=rechazados>0?'Rechazado':'Aprobado';
+  DB.saveUat(ciclos);renderView('uat');
+}
+
+function exportarActaUAT(idx){
+  const ciclo=DB.uat()[idx];
+  const id='UAT-'+String(idx+1).padStart(3,'0');
+  const aprobados=ciclo.escenarios?ciclo.escenarios.filter(function(e){return e.estado==='Aprobado';}).length:0;
+  const rechazados=ciclo.escenarios?ciclo.escenarios.filter(function(e){return e.estado==='Rechazado';}).length:0;
+  const total=ciclo.escenarios?ciclo.escenarios.length:0;
+  const pct=total?Math.round(aprobados/total*100):0;
+  const win=window.open('','_blank');
+  let html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Acta UAT '+id+'</title>'
+    +'<style>body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;color:#1a1a18;font-size:13px;line-height:1.6}'
+    +'.header{border-bottom:2px solid #1a1a18;padding-bottom:16px;margin-bottom:24px}'
+    +'h1{font-size:20px;margin-bottom:4px}h2{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#555;border-bottom:1px solid #eee;padding-bottom:5px;margin:20px 0 10px}'
+    +'.meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;font-size:12px}'
+    +'.meta-item{background:#f5f5f4;border-radius:6px;padding:8px 12px}'
+    +'.meta-label{font-size:10px;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:2px}'
+    +'table{width:100%;border-collapse:collapse;font-size:12px}'
+    +'th{text-align:left;background:#f5f5f4;padding:7px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888;border-bottom:1px solid #ddd}'
+    +'td{padding:8px 10px;border-bottom:0.5px solid #eee;vertical-align:top}'
+    +'.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600}'
+    +'.aprobado{background:#E1F5EE;color:#085041}.rechazado{background:#FCEBEB;color:#791F1F}.pendiente{background:#FAEEDA;color:#633806}'
+    +'.firma{margin-top:48px;display:grid;grid-template-columns:1fr 1fr;gap:32px}'
+    +'.firma-box{border-top:1px solid #1a1a18;padding-top:8px;text-align:center;font-size:12px;color:#888}'
+    +'.footer{margin-top:32px;padding-top:8px;border-top:1px solid #eee;font-size:10px;color:#aaa;display:flex;justify-content:space-between}'
+    +'@media print{button{display:none}}</style></head><body>'
+    +'<div class="header"><h1>Acta de Pruebas de Aceptación (UAT)</h1>'
+    +'<div style="font-size:13px;color:#555">'+escH(ciclo.nombre)+' · '+id+'</div></div>'
+    +'<div class="meta">'
+    +'<div class="meta-item"><div class="meta-label">Proyecto</div>'+escH(ciclo.proyecto)+'</div>'
+    +'<div class="meta-item"><div class="meta-label">Aprobador</div>'+escH(ciclo.aprobador||'No definido')+'</div>'
+    +'<div class="meta-item"><div class="meta-label">Fecha</div>'+escH(ciclo.fecha)+'</div>'
+    +'<div class="meta-item"><div class="meta-label">Estado del ciclo</div>'+escH(ciclo.estado)+'</div>'
+    +'<div class="meta-item"><div class="meta-label">Total escenarios</div>'+total+'</div>'
+    +'<div class="meta-item"><div class="meta-label">% Aceptación</div>'+pct+'% ('+aprobados+' aprobados / '+rechazados+' rechazados)</div>'
+    +'</div>'
+    +'<h2>Escenarios evaluados</h2>'
+    +'<table><thead><tr><th>#</th><th>Escenario</th><th>Resultado</th><th>Observaciones</th><th>Aprobado por</th></tr></thead><tbody>';
+  (ciclo.escenarios||[]).forEach(function(esc,ei){
+    html+='<tr>'
+      +'<td style="font-weight:700">'+(ei+1)+'</td>'
+      +'<td><strong>'+escH(esc.titulo)+'</strong>'+(esc.descripcion?'<br><span style="color:#666;font-size:11px">'+escH(esc.descripcion)+'</span>':'')+'</td>'
+      +'<td><span class="badge '+(esc.estado==='Aprobado'?'aprobado':esc.estado==='Rechazado'?'rechazado':'pendiente')+'">'+esc.estado+'</span></td>'
+      +'<td style="font-size:11px;color:#666">'+escH(esc.observaciones||'—')+'</td>'
+      +'<td style="font-size:11px">'+escH(esc.aprobado_por||'—')+(esc.fecha_aprobacion?' · '+escH(esc.fecha_aprobacion):'')+'</td>'
+      +'</tr>';
+  });
+  html+='</tbody></table>'
+    +'<div class="firma">'
+    +'<div class="firma-box">'+escH(ciclo.aprobador||'Aprobador')+'<br>Usuario de negocio</div>'
+    +'<div class="firma-box">Responsable del proyecto<br>Equipo de desarrollo</div>'
+    +'</div>'
+    +'<div class="footer"><span>ReqManager · Acta UAT</span><span>'+id+' · Generado: '+new Date().toLocaleDateString('es')+'</span></div>'
+    +'<br><button onclick="window.print()">Imprimir / Guardar PDF</button>'
+    +'</body></html>';
+  win.document.write(html);win.document.close();
+}
+
 /* ── PRÓXIMAMENTE ── */
 function renderProximamente(id,titulo,icono,descripcion){
   return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;text-align:center;padding:40px">
@@ -2334,7 +2582,8 @@ function exportarDatos(){
     archivados:DB.archivados(),
     solicitudes:DB.solicitudes(),
     ers:DB.ers(),
-    qa:DB.qa()
+    qa:DB.qa(),
+    uat:DB.uat()
   };
   const json=JSON.stringify(data,null,2);
   const blob=new Blob([json],{type:'application/json'});
@@ -2366,6 +2615,7 @@ function importarDatos(input){
       if(data.solicitudes) DB.saveSolicitudes(data.solicitudes);
       if(data.ers) DB.saveErs(data.ers);
       if(data.qa) DB.saveQa(data.qa);
+      if(data.uat) DB.saveUat(data.uat);
       input.value='';
       alert('¡Datos importados correctamente!');
       navigate('dashboard');
