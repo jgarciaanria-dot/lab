@@ -287,7 +287,7 @@ function mkBtn(cls,html,fn){
 
 function renderView(v){
   const c=document.getElementById('content');
-  const map={dashboard:renderDashboard,projects:renderProjects,relevamientos:renderRelevamientos,requerimientos:renderRequerimientos,archivados:renderArchivados,especificacion:renderEspecificacion,seguimiento:renderSeguimiento,evidencias:renderEvidencias,solicitudes:renderSolicitudes,historias:()=>renderProximamente('historias','Historias de usuario','ti-subtask','Generación de historias de usuario en formato Como/Quiero/Para con exportación a Jira y Azure DevOps.'),qa:renderQA,uat:renderUAT,reportes:()=>renderProximamente('reportes','Reportes','ti-chart-bar','Reportes de avance, métricas de calidad y dashboards ejecutivos por proyecto.')};
+  const map={dashboard:renderDashboard,projects:renderProjects,relevamientos:renderRelevamientos,requerimientos:renderRequerimientos,archivados:renderArchivados,especificacion:renderEspecificacion,seguimiento:renderSeguimiento,evidencias:renderEvidencias,solicitudes:renderSolicitudes,historias:()=>renderProximamente('historias','Historias de usuario','ti-subtask','Generación de historias de usuario en formato Como/Quiero/Para con exportación a Jira y Azure DevOps.'),qa:renderQA,uat:renderUAT,reportes:renderReportes};
   c.innerHTML=(map[v]||renderDashboard)();
 }
 
@@ -1952,7 +1952,7 @@ async function generarResumenProyecto(i){
   const p=DB.projects()[i];
   const sols=DB.solicitudes().filter(s=>s.proyecto===p.nombre);
   const relevs=DB.relevamientos().filter(r=>r.proyecto===p.nombre);
-  const reqs=DB.requerimientos().filter(r=>r.proyecto===p.nombre);
+  const reqs=[...DB.requerimientos(),...DB.archivados()].filter(r=>r.proyecto===p.nombre);
   const ers=DB.ers().filter(e=>e.proyecto===p.nombre);
   const ultimaErs=ers[ers.length-1]||null;
   const porEstado=STATES.map(s=>({estado:s,total:reqs.filter(r=>r.estado===s).length}));
@@ -2528,6 +2528,233 @@ function exportarActaUAT(idx){
     +'<div class="firma-box">Responsable del proyecto<br>Equipo de desarrollo</div>'
     +'</div>'
     +'<div class="footer"><span>ReqManager · Acta UAT</span><span>'+id+' · Generado: '+new Date().toLocaleDateString('es')+'</span></div>'
+    +'<br><button onclick="window.print()">Imprimir / Guardar PDF</button>'
+    +'</body></html>';
+  win.document.write(html);win.document.close();
+}
+
+/* ── REPORTES ── */
+function renderReportes(){
+  const projs=DB.projects();
+  if(!projs.length)return '<div class="empty-state"><i class="ti ti-chart-bar"></i><p>No hay proyectos registrados.</p></div>';
+  const proyectoActivo=window._reporteProyecto||projs[0]?.nombre||'';
+  const reqs=[...DB.requerimientos(),...DB.archivados()].filter(r=>r.proyecto===proyectoActivo);
+  const sols=DB.solicitudes().filter(s=>s.proyecto===proyectoActivo);
+  const relevs=DB.relevamientos().filter(r=>r.proyecto===proyectoActivo);
+  const ers=DB.ers().filter(e=>e.proyecto===proyectoActivo);
+  const qa=DB.qa();
+  const ejecuciones=qa.filter(e=>e.tipo==='ejecucion'&&e.proyecto===proyectoActivo);
+  const defectos=qa.filter(d=>d.tipo==='defecto'&&d.proyecto===proyectoActivo);
+  const ciclosUAT=DB.uat().filter(c=>c.proyecto===proyectoActivo);
+  const ultimaErs=ers[ers.length-1]||null;
+
+  // Calcular métricas
+  const totalReqs=reqs.length;
+  const pesoFase={'Pendiente':0,'Análisis':20,'Desarrollo':40,'QA':60,'UAT':80,'Producción':100};
+  const avance=totalReqs?Math.round(reqs.reduce(function(s,r){return s+(pesoFase[r.estado]||0);},0)/totalReqs):0;
+  const porEstado=STATES.map(s=>({estado:s,total:reqs.filter(r=>r.estado===s).length}));
+  const totalCasos=reqs.reduce(function(s,r){return s+(r.casos_prueba?r.casos_prueba.length:0);},0);
+  const casosEjec=ejecuciones.length;
+  const casosPaso=ejecuciones.filter(e=>e.resultado==='Pasó').length;
+  const casosFallo=ejecuciones.filter(e=>e.resultado==='Falló').length;
+  const cobertura=totalCasos?Math.round(casosEjec/totalCasos*100):0;
+  const defAbiertos=defectos.filter(d=>d.estado==='Abierto').length;
+  const defCerrados=defectos.filter(d=>d.estado==='Cerrado').length;
+  const totalEsc=ciclosUAT.reduce(function(s,c){return s+(c.escenarios?c.escenarios.length:0);},0);
+  const escAprobados=ciclosUAT.reduce(function(s,c){return s+(c.escenarios?c.escenarios.filter(e=>e.estado==='Aprobado').length:0);},0);
+  const escRechazados=ciclosUAT.reduce(function(s,c){return s+(c.escenarios?c.escenarios.filter(e=>e.estado==='Rechazado').length:0);},0);
+  const pctUAT=totalEsc?Math.round(escAprobados/totalEsc*100):0;
+
+  // Barras de estados (width máximo 200px)
+  const maxEstado=Math.max(...porEstado.map(e=>e.total),1);
+  const barColors={'Pendiente':'var(--color-text-tertiary)','Análisis':'var(--color-text-info)','Desarrollo':'#7c3aed','QA':'#c07800','UAT':'#0891b2','Producción':'var(--color-text-success)'};
+
+  let html='<div style="display:flex;gap:8px;align-items:center;margin-bottom:20px;flex-wrap:wrap">'
+    +'<select onchange="window._reporteProyecto=this.value;renderView(\'reportes\')" style="font-size:13px;padding:6px 10px;border:0.5px solid var(--color-border-secondary);border-radius:6px;background:var(--color-background-primary);color:var(--color-text-primary)">'
+    +projs.map(function(p){return '<option'+(p.nombre===proyectoActivo?' selected':'')+'>'+escH(p.nombre)+'</option>';}).join('')
+    +'</select>'
+    +'<button class="btn" onclick="exportarReporteCompleto(\''+escH(proyectoActivo)+'\')"><i class="ti ti-file-export"></i> Exportar reporte completo PDF</button>'
+    +'</div>';
+
+  // ── Reporte 1: Avance general
+  html+='<div class="card" style="margin-bottom:12px">'
+    +'<div style="font-size:11px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px">Reporte de avance general</div>'
+    +'<div class="metrics-row" style="margin-bottom:16px">'
+    +'<div class="metric-card"><div class="label">Requerimientos</div><div class="value">'+totalReqs+'</div></div>'
+    +'<div class="metric-card"><div class="label">Avance ponderado</div><div class="value" style="color:var(--color-text-info)">'+avance+'%</div></div>'
+    +'<div class="metric-card"><div class="label">Solicitudes</div><div class="value">'+sols.length+'</div></div>'
+    +'<div class="metric-card"><div class="label">Relevamientos</div><div class="value">'+relevs.length+'</div></div>'
+    +'<div class="metric-card"><div class="label">ERS generadas</div><div class="value">'+ers.length+'</div></div>'
+    +'</div>'
+    +'<div style="margin-bottom:8px"><div style="height:8px;background:var(--color-background-secondary);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+avance+'%;background:var(--color-text-info);border-radius:4px;transition:width .5s"></div></div>'
+    +'<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--color-text-tertiary);margin-top:3px"><span>0%</span><span>Avance: '+avance+'%</span><span>100%</span></div></div>'
+    +'<div style="margin-top:16px">'
+    +porEstado.map(function(e){
+      const w=Math.round(e.total/maxEstado*200);
+      return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
+        +'<span style="font-size:12px;width:90px;flex-shrink:0">'+e.estado+'</span>'
+        +'<div style="height:20px;width:'+w+'px;background:'+(barColors[e.estado]||'var(--color-text-tertiary)')+';border-radius:3px;min-width:'+(e.total>0?4:0)+'px;transition:width .3s"></div>'
+        +'<span style="font-size:12px;color:var(--color-text-secondary)">'+e.total+'</span>'
+        +'</div>';
+    }).join('')
+    +'</div>'
+    +(ultimaErs&&ultimaErs.cronograma?
+      '<div style="margin-top:14px;padding-top:12px;border-top:0.5px solid var(--color-border-tertiary)">'
+      +'<div style="font-size:11px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;margin-bottom:8px">Cronograma</div>'
+      +'<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px">'
+      +'<span><b>Inicio:</b> '+(ultimaErs.cronograma.fases?.[0]?.fecha_inicio||'—')+'</span>'
+      +'<span><b>Entrega estimada:</b> '+escH(ultimaErs.cronograma.fecha_entrega_estimada||'—')+'</span>'
+      +'<span><b>Total horas:</b> '+(ultimaErs.cronograma.total_horas||'—')+'h</span>'
+      +'</div></div>'
+    :'')
+    +'</div>';
+
+  // ── Reporte 2: QA
+  html+='<div class="card" style="margin-bottom:12px">'
+    +'<div style="font-size:11px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px">Reporte de calidad (QA)</div>'
+    +'<div class="metrics-row" style="margin-bottom:16px">'
+    +'<div class="metric-card"><div class="label">Casos totales</div><div class="value">'+totalCasos+'</div></div>'
+    +'<div class="metric-card"><div class="label">Ejecutados</div><div class="value">'+casosEjec+'</div></div>'
+    +'<div class="metric-card"><div class="label">Pasaron</div><div class="value" style="color:var(--color-text-success)">'+casosPaso+'</div></div>'
+    +'<div class="metric-card"><div class="label">Fallaron</div><div class="value" style="color:var(--color-text-danger)">'+casosFallo+'</div></div>'
+    +'<div class="metric-card"><div class="label">Cobertura</div><div class="value">'+cobertura+'%</div></div>'
+    +'</div>'
+    +(defectos.length?
+      '<div style="margin-top:4px"><div style="font-size:11px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;margin-bottom:8px">Defectos por severidad</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+      +QA_SEV.map(function(sev){
+        const cnt=defectos.filter(d=>d.severidad===sev).length;
+        return '<div style="background:var(--color-background-secondary);border-radius:6px;padding:8px 14px;text-align:center">'
+          +'<div style="font-size:18px;font-weight:600">'+cnt+'</div>'
+          +'<div style="font-size:10px;color:var(--color-text-tertiary);text-transform:uppercase">'+sev+'</div></div>';
+      }).join('')
+      +'</div>'
+      +'<div style="display:flex;gap:12px;margin-top:10px;font-size:12px">'
+      +'<span style="color:var(--color-text-danger)">● Abiertos: '+defAbiertos+'</span>'
+      +'<span style="color:var(--color-text-success)">● Cerrados: '+defCerrados+'</span>'
+      +'<span style="color:var(--color-text-secondary)">● En corrección: '+(defectos.length-defAbiertos-defCerrados)+'</span>'
+      +'</div></div>'
+    :'<div style="font-size:12px;color:var(--color-text-tertiary)">Sin ejecuciones QA registradas.</div>')
+    +'</div>';
+
+  // ── Reporte 3: UAT
+  html+='<div class="card">'
+    +'<div style="font-size:11px;font-weight:600;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px">Reporte UAT</div>'
+    +(ciclosUAT.length?
+      '<div class="metrics-row" style="margin-bottom:16px">'
+      +'<div class="metric-card"><div class="label">Ciclos UAT</div><div class="value">'+ciclosUAT.length+'</div></div>'
+      +'<div class="metric-card"><div class="label">Escenarios totales</div><div class="value">'+totalEsc+'</div></div>'
+      +'<div class="metric-card"><div class="label">Aprobados</div><div class="value" style="color:var(--color-text-success)">'+escAprobados+'</div></div>'
+      +'<div class="metric-card"><div class="label">Rechazados</div><div class="value" style="color:var(--color-text-danger)">'+escRechazados+'</div></div>'
+      +'<div class="metric-card"><div class="label">% Aceptación</div><div class="value" style="color:var(--color-text-info)">'+pctUAT+'%</div></div>'
+      +'</div>'
+      +'<div style="margin-bottom:14px"><div style="height:8px;background:var(--color-background-secondary);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+pctUAT+'%;background:var(--color-text-success);border-radius:4px"></div></div></div>'
+      +ciclosUAT.map(function(c,ci){
+        const tot=c.escenarios?c.escenarios.length:0;
+        const apr=c.escenarios?c.escenarios.filter(e=>e.estado==='Aprobado').length:0;
+        const pct2=tot?Math.round(apr/tot*100):0;
+        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--color-border-tertiary)">'
+          +'<span style="font-size:12px;flex:1">'+escH(c.nombre)+'</span>'
+          +'<span class="badge '+(UAT_EST_KEY[c.estado]||'pending')+'">'+c.estado+'</span>'
+          +'<span style="font-size:12px;color:var(--color-text-secondary)">'+apr+'/'+tot+' ('+pct2+'%)</span>'
+          +'</div>';
+      }).join('')
+    :'<div style="font-size:12px;color:var(--color-text-tertiary)">Sin ciclos UAT registrados.</div>')
+    +'</div>';
+
+  return html;
+}
+
+function exportarReporteCompleto(proyecto){
+  const projs=DB.projects();
+  const p=projs.find(function(x){return x.nombre===proyecto;})||{nombre:proyecto};
+  const reqs=[...DB.requerimientos(),...DB.archivados()].filter(r=>r.proyecto===proyecto);
+  const sols=DB.solicitudes().filter(s=>s.proyecto===proyecto);
+  const relevs=DB.relevamientos().filter(r=>r.proyecto===proyecto);
+  const ers=DB.ers().filter(e=>e.proyecto===proyecto);
+  const qa=DB.qa();
+  const ejecuciones=qa.filter(e=>e.tipo==='ejecucion'&&e.proyecto===proyecto);
+  const defectos=qa.filter(d=>d.tipo==='defecto'&&d.proyecto===proyecto);
+  const ciclosUAT=DB.uat().filter(c=>c.proyecto===proyecto);
+  const ultimaErs=ers[ers.length-1]||null;
+  const totalReqs=reqs.length;
+  const pesoFase={'Pendiente':0,'Análisis':20,'Desarrollo':40,'QA':60,'UAT':80,'Producción':100};
+  const avance=totalReqs?Math.round(reqs.reduce(function(s,r){return s+(pesoFase[r.estado]||0);},0)/totalReqs):0;
+  const porEstado=STATES.map(s=>({estado:s,total:reqs.filter(r=>r.estado===s).length}));
+  const casosPaso=ejecuciones.filter(e=>e.resultado==='Pasó').length;
+  const casosFallo=ejecuciones.filter(e=>e.resultado==='Falló').length;
+  const totalCasos=reqs.reduce(function(s,r){return s+(r.casos_prueba?r.casos_prueba.length:0);},0);
+  const cobertura=totalCasos?Math.round(ejecuciones.length/totalCasos*100):0;
+  const totalEsc=ciclosUAT.reduce(function(s,c){return s+(c.escenarios?c.escenarios.length:0);},0);
+  const escAprobados=ciclosUAT.reduce(function(s,c){return s+(c.escenarios?c.escenarios.filter(e=>e.estado==='Aprobado').length:0);},0);
+  const pctUAT=totalEsc?Math.round(escAprobados/totalEsc*100):0;
+  const fecha=new Date().toLocaleDateString('es');
+
+  const win=window.open('','_blank');
+  let html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Reporte — '+proyecto+'</title>'
+    +'<style>body{font-family:Arial,sans-serif;max-width:820px;margin:40px auto;color:#1a1a18;font-size:13px;line-height:1.6}'
+    +'.cover{text-align:center;padding:32px 0;border-bottom:2px solid #1a1a18;margin-bottom:28px}'
+    +'h1{font-size:22px;margin:0 0 6px}h2{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#555;border-bottom:1px solid #eee;padding-bottom:5px;margin:20px 0 10px}'
+    +'.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px}'
+    +'.kpi{text-align:center;background:#f5f5f4;border-radius:6px;padding:10px 6px}'
+    +'.kpi-val{font-size:20px;font-weight:700}.kpi-label{font-size:9px;color:#888;text-transform:uppercase}'
+    +'.bar-row{display:flex;align-items:center;gap:10px;margin-bottom:7px}'
+    +'.bar{height:16px;border-radius:3px;min-width:2px}'
+    +'table{width:100%;border-collapse:collapse;font-size:12px}'
+    +'th{text-align:left;background:#f5f5f4;padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#888;border-bottom:1px solid #ddd}'
+    +'td{padding:7px 10px;border-bottom:0.5px solid #eee}'
+    +'.progress{height:8px;background:#eee;border-radius:4px;overflow:hidden;margin-bottom:4px}'
+    +'.progress-fill{height:100%;border-radius:4px}'
+    +'.footer{margin-top:40px;padding-top:8px;border-top:1px solid #eee;font-size:10px;color:#aaa;display:flex;justify-content:space-between}'
+    +'@media print{button{display:none}@page{margin:1.5cm}}</style></head><body>'
+    +'<div class="cover"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#888;margin-bottom:8px">Reporte de proyecto</div>'
+    +'<h1>'+escH(proyecto)+'</h1>'
+    +'<div style="font-size:13px;color:#888">'+escH(p.area||'')+(p.responsable?' · '+escH(p.responsable):'')+'</div>'
+    +'<div style="font-size:12px;color:#aaa;margin-top:4px">Generado: '+fecha+'</div></div>'
+
+    +'<h2>Avance general</h2>'
+    +'<div class="grid">'
+    +porEstado.map(function(e){return '<div class="kpi"><div class="kpi-val">'+e.total+'</div><div class="kpi-label">'+e.estado+'</div></div>';}).join('')
+    +'</div>'
+    +'<div class="progress"><div class="progress-fill" style="width:'+avance+'%;background:#185fa5"></div></div>'
+    +'<div style="text-align:center;font-size:12px;color:#555;margin-bottom:12px">Avance ponderado: <b>'+avance+'%</b></div>'
+    +(ultimaErs&&ultimaErs.cronograma?
+      '<table><thead><tr>'+ultimaErs.cronograma.fases.map(function(f){return '<th style="text-align:center">'+f.fase+'</th>';}).join('')+'</tr></thead>'
+      +'<tbody><tr>'+ultimaErs.cronograma.fases.map(function(f){return '<td style="text-align:center;font-size:11px">'+f.fecha_fin+'<br><span style="color:#888">'+f.duracion_dias+'d</span></td>';}).join('')+'</tr></tbody></table>'
+      +'<div style="font-size:12px;margin-top:6px">Entrega estimada: <b>'+escH(ultimaErs.cronograma.fecha_entrega_estimada||'—')+'</b> · Total horas: <b>'+(ultimaErs.cronograma.total_horas||'—')+'h</b></div>'
+    :'')
+
+    +'<h2>Calidad (QA)</h2>'
+    +'<div class="grid" style="grid-template-columns:repeat(5,1fr)">'
+    +'<div class="kpi"><div class="kpi-val">'+totalCasos+'</div><div class="kpi-label">Casos</div></div>'
+    +'<div class="kpi"><div class="kpi-val">'+ejecuciones.length+'</div><div class="kpi-label">Ejecutados</div></div>'
+    +'<div class="kpi"><div class="kpi-val" style="color:#0f6e56">'+casosPaso+'</div><div class="kpi-label">Pasaron</div></div>'
+    +'<div class="kpi"><div class="kpi-val" style="color:#a32d2d">'+casosFallo+'</div><div class="kpi-label">Fallaron</div></div>'
+    +'<div class="kpi"><div class="kpi-val">'+cobertura+'%</div><div class="kpi-label">Cobertura</div></div>'
+    +'</div>'
+    +(defectos.length?'<div style="font-size:12px;margin-top:6px">Defectos: '
+      +QA_SEV.map(function(s){return s+': '+defectos.filter(d=>d.severidad===s).length;}).join(' · ')
+      +' · Abiertos: <b style="color:#a32d2d">'+defectos.filter(d=>d.estado==='Abierto').length+'</b></div>':'')
+
+    +'<h2>Pruebas de aceptación (UAT)</h2>'
+    +(ciclosUAT.length?
+      '<div class="grid" style="grid-template-columns:repeat(5,1fr)">'
+      +'<div class="kpi"><div class="kpi-val">'+ciclosUAT.length+'</div><div class="kpi-label">Ciclos</div></div>'
+      +'<div class="kpi"><div class="kpi-val">'+totalEsc+'</div><div class="kpi-label">Escenarios</div></div>'
+      +'<div class="kpi"><div class="kpi-val" style="color:#0f6e56">'+escAprobados+'</div><div class="kpi-label">Aprobados</div></div>'
+      +'<div class="kpi"><div class="kpi-val" style="color:#a32d2d">'+(totalEsc-escAprobados)+'</div><div class="kpi-label">Pendientes/Rec.</div></div>'
+      +'<div class="kpi"><div class="kpi-val">'+pctUAT+'%</div><div class="kpi-label">Aceptación</div></div>'
+      +'</div>'
+      +'<table><thead><tr><th>Ciclo</th><th>Estado</th><th>Escenarios</th><th>Aprobados</th><th>% Aceptación</th></tr></thead><tbody>'
+      +ciclosUAT.map(function(c){
+        const tot=c.escenarios?c.escenarios.length:0;
+        const apr=c.escenarios?c.escenarios.filter(e=>e.estado==='Aprobado').length:0;
+        return '<tr><td>'+escH(c.nombre)+'</td><td>'+escH(c.estado)+'</td><td>'+tot+'</td><td>'+apr+'</td><td>'+(tot?Math.round(apr/tot*100):0)+'%</td></tr>';
+      }).join('')
+      +'</tbody></table>'
+    :'<div style="font-size:12px;color:#888">Sin ciclos UAT registrados.</div>')
+
+    +'<div class="footer"><span>ReqManager · Reporte de proyecto</span><span>'+escH(proyecto)+' · '+fecha+'</span></div>'
     +'<br><button onclick="window.print()">Imprimir / Guardar PDF</button>'
     +'</body></html>';
   win.document.write(html);win.document.close();
