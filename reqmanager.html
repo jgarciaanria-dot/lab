@@ -545,6 +545,7 @@ function viewRelevamiento(i){
       <button class="btn" onclick="closeModal()">Cerrar</button>
       <button class="btn" onclick="closeModal();exportRelPDF(${i})"><i class="ti ti-file-export"></i> Exportar PDF</button>
       <button class="btn" onclick="closeModal();openRelevamientoModal(DB.relevamientos()[${i}],${i})"><i class="ti ti-edit"></i> Editar</button>
+      <button class="btn" onclick="closeModal();generarDocIEEE(${i})" style="color:var(--color-text-info);border-color:rgba(24,95,165,0.3)"><i class="ti ti-file-description"></i> Documento IEEE 830</button>
       <button class="btn primary" onclick="closeModal();generarReqsDesdeRelevamiento(DB.relevamientos()[${i}],${i})"><i class="ti ti-sparkles"></i> Generar con IA</button>
     </div>`);
 }
@@ -573,7 +574,265 @@ function exportRelPDF(i){
   win.document.close();
 }
 
-/* ── HELPERS DE NUMERACIÓN POR PROYECTO ── */
+/* ── DOCUMENTO IEEE 830 ── */
+async function generarDocIEEE(i){
+  if(!checkApiKey())return;
+  const r=DB.relevamientos()[i];
+  const proj=DB.projects().find(p=>p.nombre===r.proyecto)||{};
+  const reqs=DB.requerimientos().filter(x=>x.proyecto===r.proyecto);
+  const relevs=DB.relevamientos();
+  const projRels=relevs.filter(x=>x.proyecto===r.proyecto);
+  const posEnProyecto=projRels.indexOf(r);
+  const relId='REL-'+String(posEnProyecto+1).padStart(3,'0');
+  const codigo='REQ-'+new Date().getFullYear()+'-'+String(i+1).padStart(3,'0');
+
+  // Mostrar pantalla de carga
+  const loadWin=window.open('','_blank');
+  loadWin.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Generando...</title>'
+    +'<style>body{font-family:Arial,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f5f5f4;color:#555}'
+    +'.box{text-align:center;padding:40px}.spinner{width:40px;height:40px;border:3px solid #eee;border-top-color:#185fa5;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 16px}'
+    +'@keyframes spin{to{transform:rotate(360deg)}}</style></head><body>'
+    +'<div class="box"><div class="spinner"></div><div style="font-size:14px;font-weight:500">Generando documento IEEE 830 con IA...</div>'
+    +'<div style="font-size:12px;color:#888;margin-top:8px">Analizando relevamiento '+relId+'</div></div></body></html>');
+  loadWin.document.close();
+
+  const prompt='Eres un analista de sistemas senior experto en estándar IEEE 830. Genera un documento de levantamiento de requerimientos completo y profesional basado en el siguiente relevamiento.\n\n'
+    +'DATOS DEL RELEVAMIENTO:\n'
+    +'Proyecto: '+(r.proyecto||'No especificado')+'\n'
+    +'Problema/Necesidad: '+(r.problema||'')+'\n'
+    +'Flujo actual: '+(r.flujo_actual||'No especificado')+'\n'
+    +'Impacto: '+(r.impacto||'No especificado')+'\n'
+    +'Usuarios involucrados: '+(r.usuarios||'No especificado')+'\n'
+    +'Reglas de negocio: '+(r.reglas||'No especificadas')+'\n\n'
+    +'CONTEXTO DEL PROYECTO:\n'
+    +'Área: '+(proj.area||'—')+' | Responsable: '+(proj.responsable||'—')+' | Estado: '+(proj.estado||'—')+'\n'
+    +'Requerimientos existentes: '+reqs.length+'\n\n'
+    +'Genera el documento IEEE 830 completo. Responde SOLO con JSON (sin backticks) con estas claves:\n'
+    +'codigo_documento (string), version (string: 1.0), estado (string: Borrador), '
+    +'proposito (string: propósito del documento), alcance_sistema (string: descripción del sistema), '
+    +'alcance_incluye (array de strings), alcance_excluye (array de strings), '
+    +'definiciones (array de objetos con termino y definicion), '
+    +'stakeholders (array de objetos con nombre, rol, responsabilidad), '
+    +'requerimientos_funcionales (array de objetos con id, titulo, descripcion, prioridad, criterios), '
+    +'requerimientos_no_funcionales (array de objetos con categoria, descripcion), '
+    +'supuestos (array de strings), restricciones (array de strings), '
+    +'riesgos (array de objetos con descripcion, probabilidad, impacto, mitigacion), '
+    +'aprobaciones (array de objetos con rol, nombre con valor vacio, firma con valor vacio, fecha con valor vacio).';
+
+  try{
+    const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key='+getApiKey(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})});
+    const data=await res.json();
+    if(data.error){loadWin.document.body.innerHTML='<div style="padding:40px;color:red">Error: '+data.error.message+'</div>';return;}
+    const text=data.candidates[0].content.parts[0].text||'';
+    const d=JSON.parse(text.replace(/```json|```/g,'').trim());
+
+    // Guardar en relevamiento
+    const arr=DB.relevamientos();
+    arr[i].ieee830=d;
+    arr[i].ieee830_fecha=new Date().toISOString().split('T')[0];
+    DB.saveRelevamientos(arr);
+
+    // Generar HTML del documento navegable
+    const fecha=new Date().toLocaleDateString('es',{month:'long',year:'numeric'});
+    let html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+escH(r.proyecto||'Documento')+' — IEEE 830</title>'
+      +'<style>'
+      +'*{box-sizing:border-box;margin:0;padding:0}'
+      +'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0f1117;color:#e8e6df;font-size:13px}'
+      +'.cover{background:linear-gradient(135deg,#0f1117 0%,#1a1f35 50%,#0f2744 100%);padding:48px 40px;min-height:200px}'
+      +'.cover-badge{display:inline-block;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:20px;padding:3px 12px;font-size:11px;font-weight:600;color:#85b7eb;margin-bottom:16px}'
+      +'.cover h1{font-size:28px;font-weight:700;line-height:1.3;margin-bottom:8px;color:#fff}'
+      +'.cover .sub{font-size:12px;color:#6b8ab5;margin-bottom:28px}'
+      +'.cover-meta{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:20px}'
+      +'.cover-meta-item .label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#4a6080;margin-bottom:4px}'
+      +'.cover-meta-item .value{font-size:13px;font-weight:600;color:#c8dff5}'
+      +'.tabs{display:flex;gap:0;background:#1a1f2e;border-bottom:1px solid #2a3040;overflow-x:auto;padding:0 40px}'
+      +'.tab-btn{padding:12px 18px;font-size:12px;font-weight:500;color:#6b8ab5;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:all .2s}'
+      +'.tab-btn.active{color:#85b7eb;border-bottom-color:#185fa5}'
+      +'.tab-btn:hover{color:#c8dff5}'
+      +'.content{max-width:900px;margin:0 auto;padding:32px 40px}'
+      +'.panel{display:none}.panel.active{display:block}'
+      +'.section{margin-bottom:28px}'
+      +'.section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#4a6080;margin-bottom:12px;display:flex;align-items:center;gap:8px}'
+      +'.section-title::after{content:"";flex:1;height:1px;background:#1e2535}'
+      +'.card{background:#1a1f2e;border:1px solid #2a3040;border-radius:8px;padding:16px 18px;margin-bottom:8px}'
+      +'.card p{font-size:13px;line-height:1.7;color:#c8dff5}'
+      +'.tag{display:inline-block;padding:2px 9px;border-radius:12px;font-size:10px;font-weight:600;margin:2px}'
+      +'.tag-alta{background:#501313;color:#F09595}.tag-media{background:#412402;color:#FAC775}.tag-baja{background:#173404;color:#C0DD97}'
+      +'.req-card{background:#1a1f2e;border:1px solid #2a3040;border-radius:8px;padding:14px 16px;margin-bottom:8px}'
+      +'.req-id{font-size:10px;font-weight:700;color:#4a6080;margin-bottom:4px}'
+      +'.req-title{font-size:13px;font-weight:600;color:#e8e6df;margin-bottom:6px}'
+      +'.req-desc{font-size:12px;color:#9c9a92;line-height:1.6;margin-bottom:8px}'
+      +'.req-crit{font-size:11px;color:#6b8ab5;font-style:italic;border-left:2px solid #185fa5;padding-left:8px}'
+      +'.risk-card{background:#1a1f2e;border:1px solid #2a3040;border-radius:8px;padding:12px 16px;margin-bottom:8px;display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:start}'
+      +'.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:600}'
+      +'.badge-alto{background:#501313;color:#F09595}.badge-medio{background:#412402;color:#FAC775}.badge-bajo{background:#173404;color:#C0DD97}'
+      +'.aprobacion-row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;padding:12px 0;border-bottom:1px solid #1e2535}'
+      +'.aprobacion-label{font-size:10px;color:#4a6080;font-weight:600;text-transform:uppercase;margin-bottom:4px}'
+      +'.aprobacion-val{font-size:12px;color:#9c9a92;min-height:24px;border-bottom:1px solid #2a3040;padding-bottom:4px}'
+      +'.form-field{margin-bottom:12px}'
+      +'.form-field label{font-size:10px;font-weight:600;color:#4a6080;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:4px}'
+      +'.form-field .val{font-size:12px;color:#c8dff5;background:#0f1117;border:1px solid #2a3040;border-radius:4px;padding:7px 10px}'
+      +'.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}'
+      +'.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}'
+      +'table{width:100%;border-collapse:collapse}'
+      +'th{text-align:left;padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#4a6080;border-bottom:1px solid #2a3040}'
+      +'td{padding:8px 10px;border-bottom:1px solid #1e2535;font-size:12px;color:#9c9a92;vertical-align:top}'
+      +'@media print{.tabs,.cover{background:#1a1a18!important}.tab-btn{display:none}.panel{display:block!important}body{background:white;color:#1a1a18}button{display:none}}'
+      +'</style></head><body>'
+
+      // Cover
+      +'<div class="cover">'
+      +'<div class="cover-badge">v'+(d.version||'1.0')+' — '+(d.estado||'Borrador')+'</div>'
+      +'<h1>Especificación de Requerimientos<br>de Sistema / Software</h1>'
+      +'<div class="sub">Basado en IEEE Std 830-1998 · Adaptación PMI/BABOK</div>'
+      +'<div class="cover-meta">'
+      +'<div class="cover-meta-item"><div class="label">Proyecto</div><div class="value">'+escH(r.proyecto||'—')+'</div></div>'
+      +'<div class="cover-meta-item"><div class="label">Fecha</div><div class="value">'+fecha+'</div></div>'
+      +'<div class="cover-meta-item"><div class="label">Estado</div><div class="value">'+(d.estado||'Borrador')+'</div></div>'
+      +'</div></div>'
+
+      // Tabs
+      +'<div class="tabs">'
+      +'<button class="tab-btn active" onclick="showTab(this,\'portada\')">① Portada</button>'
+      +'<button class="tab-btn" onclick="showTab(this,\'alcance\')">② Alcance</button>'
+      +'<button class="tab-btn" onclick="showTab(this,\'stakeholders\')">③ Stakeholders</button>'
+      +'<button class="tab-btn" onclick="showTab(this,\'requerimientos\')">④ Requerimientos</button>'
+      +'<button class="tab-btn" onclick="showTab(this,\'riesgos\')">⑤ Riesgos</button>'
+      +'<button class="tab-btn" onclick="showTab(this,\'aprobaciones\')">⑥ Aprobaciones</button>'
+      +'</div>'
+
+      +'<div class="content">'
+
+      // Panel 1: Portada
+      +'<div class="panel active" id="panel-portada">'
+      +'<div class="section"><div class="section-title">Información general del documento</div>'
+      +'<div class="grid-2">'
+      +'<div class="form-field"><label>Código del documento</label><div class="val">'+escH(codigo)+'</div></div>'
+      +'<div class="form-field"><label>Versión</label><div class="val">'+(d.version||'1.0')+'</div></div>'
+      +'<div class="form-field"><label>Nombre del proyecto</label><div class="val">'+escH(r.proyecto||'—')+'</div></div>'
+      +'<div class="form-field"><label>Área / Cliente</label><div class="val">'+escH(proj.area||'—')+'</div></div>'
+      +'<div class="form-field"><label>Analista responsable</label><div class="val">'+escH(proj.responsable||'—')+'</div></div>'
+      +'<div class="form-field"><label>Líder de proyecto (PM)</label><div class="val">'+escH(proj.responsable||'—')+'</div></div>'
+      +'<div class="form-field"><label>Fecha de relevamiento</label><div class="val">'+escH(r.fecha||'—')+'</div></div>'
+      +'<div class="form-field"><label>Estado</label><div class="val">'+(d.estado||'Borrador')+'</div></div>'
+      +'</div></div>'
+      +'<div class="section"><div class="section-title">Propósito del documento</div>'
+      +'<div class="card"><p>'+escH(d.proposito||'')+'</p></div></div>'
+      +(d.definiciones&&d.definiciones.length?
+        '<div class="section"><div class="section-title">Definiciones y acrónimos</div>'
+        +'<table><thead><tr><th>Término</th><th>Definición</th></tr></thead><tbody>'
+        +d.definiciones.map(function(x){return '<tr><td style="font-weight:600;color:#c8dff5">'+escH(x.termino)+'</td><td>'+escH(x.definicion)+'</td></tr>';}).join('')
+        +'</tbody></table></div>':''
+      )
+      +'</div>'
+
+      // Panel 2: Alcance
+      +'<div class="panel" id="panel-alcance">'
+      +'<div class="section"><div class="section-title">Descripción del sistema</div>'
+      +'<div class="card"><p>'+escH(d.alcance_sistema||'')+'</p></div></div>'
+      +(d.alcance_incluye&&d.alcance_incluye.length?
+        '<div class="section"><div class="section-title">Dentro del alcance</div>'
+        +d.alcance_incluye.map(function(x){return '<div class="card" style="display:flex;gap:10px;align-items:flex-start"><span style="color:#5DCAA5;font-size:14px;flex-shrink:0">✓</span><p>'+escH(x)+'</p></div>';}).join('')
+        +'</div>':''
+      )
+      +(d.alcance_excluye&&d.alcance_excluye.length?
+        '<div class="section"><div class="section-title">Fuera del alcance</div>'
+        +d.alcance_excluye.map(function(x){return '<div class="card" style="display:flex;gap:10px;align-items:flex-start"><span style="color:#F09595;font-size:14px;flex-shrink:0">✕</span><p>'+escH(x)+'</p></div>';}).join('')
+        +'</div>':''
+      )
+      +(d.supuestos&&d.supuestos.length?
+        '<div class="section"><div class="section-title">Supuestos y dependencias</div>'
+        +d.supuestos.map(function(x){return '<div class="card" style="display:flex;gap:10px;align-items:flex-start"><span style="color:#85b7eb;font-size:14px;flex-shrink:0">→</span><p>'+escH(x)+'</p></div>';}).join('')
+        +'</div>':''
+      )
+      +(d.restricciones&&d.restricciones.length?
+        '<div class="section"><div class="section-title">Restricciones</div>'
+        +d.restricciones.map(function(x){return '<div class="card" style="display:flex;gap:10px;align-items:flex-start"><span style="color:#FAC775;font-size:14px;flex-shrink:0">⚠</span><p>'+escH(x)+'</p></div>';}).join('')
+        +'</div>':''
+      )
+      +'</div>'
+
+      // Panel 3: Stakeholders
+      +'<div class="panel" id="panel-stakeholders">'
+      +(d.stakeholders&&d.stakeholders.length?
+        '<div class="section"><div class="section-title">Partes interesadas</div>'
+        +'<table><thead><tr><th>Nombre / Cargo</th><th>Rol</th><th>Responsabilidad</th></tr></thead><tbody>'
+        +d.stakeholders.map(function(s){return '<tr><td style="font-weight:600;color:#c8dff5">'+escH(s.nombre)+'</td><td>'+escH(s.rol)+'</td><td>'+escH(s.responsabilidad)+'</td></tr>';}).join('')
+        +'</tbody></table></div>':''
+      )
+      +'</div>'
+
+      // Panel 4: Requerimientos
+      +'<div class="panel" id="panel-requerimientos">'
+      +(d.requerimientos_funcionales&&d.requerimientos_funcionales.length?
+        '<div class="section"><div class="section-title">Requerimientos funcionales</div>'
+        +d.requerimientos_funcionales.map(function(rf){
+          const pKey=(rf.prioridad||'').toLowerCase();
+          return '<div class="req-card">'
+            +'<div class="req-id">'+escH(rf.id||'')+'  <span class="tag tag-'+(pKey==='alta'?'alta':pKey==='media'?'media':'baja')+'">'+escH(rf.prioridad||'')+'</span></div>'
+            +'<div class="req-title">'+escH(rf.titulo||'')+'</div>'
+            +'<div class="req-desc">'+escH(rf.descripcion||'')+'</div>'
+            +(rf.criterios?'<div class="req-crit">'+escH(rf.criterios)+'</div>':'')
+            +'</div>';
+        }).join('')+'</div>':''
+      )
+      +(d.requerimientos_no_funcionales&&d.requerimientos_no_funcionales.length?
+        '<div class="section"><div class="section-title">Requerimientos no funcionales</div>'
+        +d.requerimientos_no_funcionales.map(function(rnf){
+          return '<div class="card"><div style="font-size:10px;font-weight:700;color:#6b8ab5;text-transform:uppercase;margin-bottom:4px">'+escH(rnf.categoria||'')+'</div><p>'+escH(rnf.descripcion||'')+'</p></div>';
+        }).join('')+'</div>':''
+      )
+      +'</div>'
+
+      // Panel 5: Riesgos
+      +'<div class="panel" id="panel-riesgos">'
+      +(d.riesgos&&d.riesgos.length?
+        '<div class="section"><div class="section-title">Riesgos identificados</div>'
+        +d.riesgos.map(function(rsk){
+          const pKey=(rsk.probabilidad||'').toLowerCase();
+          const iKey=(rsk.impacto||'').toLowerCase();
+          return '<div class="risk-card">'
+            +'<div><div style="font-size:12px;font-weight:500;color:#e8e6df;margin-bottom:6px">'+escH(rsk.descripcion||'')+'</div>'
+            +'<div style="font-size:11px;color:#6b8ab5">'+escH(rsk.mitigacion||'')+'</div></div>'
+            +'<span class="badge badge-'+(pKey==='alta'||pKey==='alto'?'alto':pKey==='media'||pKey==='medio'?'medio':'bajo')+'">Prob: '+escH(rsk.probabilidad||'')+'</span>'
+            +'<span class="badge badge-'+(iKey==='alto'?'alto':iKey==='medio'?'medio':'bajo')+'">Imp: '+escH(rsk.impacto||'')+'</span>'
+            +'</div>';
+        }).join('')+'</div>':''
+      )
+      +'</div>'
+
+      // Panel 6: Aprobaciones
+      +'<div class="panel" id="panel-aprobaciones">'
+      +'<div class="section"><div class="section-title">Firmas de aprobación</div>'
+      +(d.aprobaciones&&d.aprobaciones.length?
+        '<table><thead><tr><th>Rol</th><th>Nombre</th><th>Firma</th><th>Fecha</th></tr></thead><tbody>'
+        +d.aprobaciones.map(function(a){return '<tr><td style="font-weight:600;color:#c8dff5">'+escH(a.rol||'')+'</td><td style="min-width:120px;border-bottom:1px solid #2a3040">&nbsp;</td><td style="min-width:120px;border-bottom:1px solid #2a3040">&nbsp;</td><td style="min-width:100px;border-bottom:1px solid #2a3040">&nbsp;</td></tr>';}).join('')
+        +'</tbody></table>':''
+      )
+      +'<div style="margin-top:24px;padding:16px;background:#0f1117;border-radius:6px;border:1px solid #2a3040;font-size:11px;color:#4a6080">'
+      +'Documento generado por ReqManager · '+relId+' · '+new Date().toLocaleDateString('es')+'</div>'
+      +'</div></div>'
+
+      +'</div>' // content
+
+      +'<script>'
+      +'function showTab(btn,id){'
+      +'document.querySelectorAll(".tab-btn").forEach(function(b){b.classList.remove("active");});'
+      +'document.querySelectorAll(".panel").forEach(function(p){p.classList.remove("active");});'
+      +'btn.classList.add("active");'
+      +'document.getElementById("panel-"+id).classList.add("active");'
+      +'}'
+      +'<\/script>'
+      +'</body></html>';
+
+    loadWin.document.open();
+    loadWin.document.write(html);
+    loadWin.document.close();
+
+  }catch(e){
+    loadWin.document.body.innerHTML='<div style="padding:40px;color:red;font-family:sans-serif">Error al generar: '+e.message+'</div>';
+  }
+}
 function getNumPorProyecto(arr,idx,prefix){
   const item=arr[idx];
   const proyecto=item.proyecto||'__sin_proyecto__';
